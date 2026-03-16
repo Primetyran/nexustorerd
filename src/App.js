@@ -3,10 +3,7 @@ import { auth, db } from "./firebase";
 import {
   signInWithEmailAndPassword,
   signOut,
-  onAuthStateChanged,
-  updatePassword,
-  EmailAuthProvider,
-  reauthenticateWithCredential
+  onAuthStateChanged
 } from "firebase/auth";
 import {
   doc, getDoc, setDoc, onSnapshot
@@ -145,7 +142,7 @@ function FirebaseDataWrapper({ user, onLogout, children }) {
   return (
     <div style={{ position:"relative" }}>
       {/* Barra de usuario */}
-      <div style={{ position:"fixed", top:0, right:0, zIndex:9999, display:"flex", alignItems:"center", gap:10, padding:"6px 16px", background:"#050505", borderLeft:"1px solid #00d4ff15", borderBottom:"1px solid #00d4ff15", borderRadius:"0 0 0 8px" }}>
+      <div style={{ position:"fixed", bottom:0, right:0, zIndex:9999, display:"flex", alignItems:"center", gap:10, padding:"6px 16px", background:"#050505", borderLeft:"1px solid #00d4ff15", borderTop:"1px solid #00d4ff15", borderRadius:"8px 0 0 0" }}>
         <div style={{ width:8, height:8, borderRadius:"50%", background:"#00e676", boxShadow:"0 0 6px #00e676" }} />
         <span style={{ fontSize:11, color:"#444", fontFamily:"monospace", letterSpacing:1 }}>{user.email}</span>
         <button
