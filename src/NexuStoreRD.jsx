@@ -720,7 +720,7 @@ export default function NexuStoreRD() {
               </div>
               <div style={{ display:"grid", gridTemplateColumns:"1.5fr 1fr", gap:16, marginBottom:16 }}>
                 <div className="card-hover border-glow" style={{ background:"#080808", border:"1px solid #00d4ff20", borderRadius:6, padding:"24px" }}>
-                  <div style={{ fontFamily:"Orbitron,monospace", fontSize:11, color:"#00d4ff", letterSpacing:2, marginBottom:20 }}>◈ VENTAS POR MES — {`${currentYear}`}</div>
+                  <div style={{ fontFamily:"Orbitron,monospace", fontSize:11, color:"#00d4ff", letterSpacing:2, marginBottom:20 }}>{"◈ VENTAS POR MES — " + currentYear}</div>
                   <div style={{ display:"flex", alignItems:"flex-end", gap:6, height:120 }}>
                     {ventasPorMes.map((v,i) => {
                       const h = maxVenta > 0 ? (v.valor/maxVenta)*100 : 0;
