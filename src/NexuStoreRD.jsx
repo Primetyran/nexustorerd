@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 // ═══════════════════════════════════════════════════════════
-// NEXUSTORERD v5.8 — Sistema de Gestión | by Jeffrey Vargas
-// NOVEDADES v5.8: Gráfico del dashboard muestra % ganancia y % gasto sobre ventas por mes
+// NEXUSTORERD v6.0 — Sistema de Gestión | by Jeffrey Vargas
+// NOVEDADES v6.0: Dashboard móvil sin gráfico — solo tarjetas, últimas ventas y botón reporte
 // ═══════════════════════════════════════════════════════════
 
 const DEMO_DATA = {
@@ -35,7 +35,7 @@ const DEMO_DATA = {
 };
 
 const CATEGORIAS_DEFAULT = ["Mouse","Teclado","Audio","Monitor","Almacenamiento","Accesorios","Cámara","Otro"];
-const STORAGE_KEY = "nexustorerd-v58";
+const STORAGE_KEY = "nexustorerd-v60";
 const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
 export default function NexuStoreRD() {
@@ -780,6 +780,37 @@ export default function NexuStoreRD() {
         .slide-in{animation:slideIn .3s ease-out;}
         .scanline{position:absolute;width:100%;height:2px;background:linear-gradient(transparent,#00d4ff08,transparent);animation:scanline 8s linear infinite;pointer-events:none;z-index:1;}
         .border-glow{animation:borderGlow 3s ease-in-out infinite;}
+
+        /* ── RESPONSIVE MÓVIL ── */
+        .sidebar-desktop{display:flex;}
+        .bottomnav{display:none;}
+        .hide-mobile{display:block;}
+        .show-mobile{display:none;}
+        .main-header-title{font-size:18px;}
+        .content-pad{padding:24px 28px;}
+        .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+        .grid-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+        .grid-chart{display:grid;grid-template-columns:1.5fr 1fr;gap:16px;}
+
+        @media(max-width:768px){
+          .sidebar-desktop{display:none!important;}
+          .bottomnav{display:flex!important;position:fixed;bottom:0;left:0;right:0;background:#050505;border-top:1px solid #00d4ff20;z-index:100;padding-bottom:env(safe-area-inset-bottom);}
+          .bottomnav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 4px 8px;cursor:pointer;gap:3px;border:none;background:transparent;font-family:inherit;}
+          .bottomnav-icon{font-size:20px;}
+          .bottomnav-label{font-size:8px;letter-spacing:.5px;font-weight:700;text-transform:uppercase;}
+          .main-header-title{font-size:14px!important;}
+          .content-pad{padding:14px 14px 90px!important;}
+          .grid-stats{grid-template-columns:repeat(2,1fr)!important;gap:10px!important;}
+          .grid-chart{grid-template-columns:1fr!important;}
+          .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:6px;}
+          .table-scroll table{min-width:600px;}
+          .btn-add{padding:14px 18px!important;font-size:13px!important;}
+          .modal-inner{width:95%!important;max-width:95%!important;margin:0 10px!important;}
+          .grid2-form{grid-template-columns:1fr!important;}
+          .header-actions{gap:8px!important;}
+          .hide-mobile{display:none!important;}
+          .show-mobile{display:flex!important;}
+        }
       `}</style>
 
       <canvas ref={canvasRef} style={{ position:"fixed", top:0, left:0, width:"100%", height:"100%", opacity:.03, pointerEvents:"none", zIndex:0 }} />
@@ -808,13 +839,13 @@ export default function NexuStoreRD() {
       )}
 
       {/* ═══ SIDEBAR ═══════════════════════════════════════════════════════ */}
-      <div style={{ width:230, background:"#050505", borderRight:"1px solid #00d4ff20", padding:"0 0 24px", display:"flex", flexDirection:"column", position:"relative", zIndex:10, flexShrink:0 }}>
+      <div className="sidebar-desktop" style={{ width:230, background:"#050505", borderRight:"1px solid #00d4ff20", padding:"0 0 24px", flexDirection:"column", position:"relative", zIndex:10, flexShrink:0 }}>
         <div style={{ padding:"28px 20px 24px", borderBottom:"1px solid #00d4ff15", marginBottom:12 }}>
           <div className={glitch?"glitch":""} style={{ fontFamily:"Orbitron,monospace", fontSize:20, fontWeight:900, color:"#00d4ff", letterSpacing:3, lineHeight:1.1 }}>
             NEXU<span style={{ color:"#ff6b35" }}>STORE</span>
           </div>
           <div style={{ color:"#ff6b35", fontSize:11, letterSpacing:4, marginTop:4, fontWeight:700 }}>RD</div>
-          <div style={{ fontSize:10, color:"#333", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v5.8</div>
+          <div style={{ fontSize:10, color:"#333", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v6.0</div>
         </div>
         <div style={{ padding:"0 12px", flex:1 }}>
           {NAV.map(item => (
@@ -858,12 +889,12 @@ export default function NexuStoreRD() {
         </div>
 
         {/* Content */}
-        <div style={{ flex:1, overflowY:"auto", padding:"24px 28px" }}>
+        <div className="content-pad" style={{ flex:1, overflowY:"auto", padding:"24px 28px" }}>
 
           {/* ── DASHBOARD ─────────────────────────────────────────────── */}
           {view==="dashboard" && (
             <div className="fade-in">
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:16, marginBottom:24 }}>
+              <div className="grid-stats" style={{ marginBottom:24 }}>
                 {[
                   { label:"VENTAS TOTALES",  value:fmt(totalVentas),  icon:"▲", color:"#00e676", sub:`${data.ventas.length} transacciones` },
                   { label:"COMPRAS TOTALES", value:fmt(totalCompras), icon:"▼", color:"#ff6b35", sub:`${data.compras.length} órdenes` },
@@ -878,7 +909,32 @@ export default function NexuStoreRD() {
                   </div>
                 ))}
               </div>
-              <div style={{ display:"grid", gridTemplateColumns:"1.5fr 1fr", gap:16, marginBottom:16 }}>
+
+              {/* ── MÓVIL ONLY: botón reporte + últimas ventas compactas ── */}
+              <div className="show-mobile" style={{ flexDirection:"column", gap:10, marginBottom:14 }}>
+                <button className="btn-glow" onClick={()=>setReporteModal(true)}
+                  style={{ width:"100%", background:"#a78bfa20", color:"#a78bfa", border:"1px solid #a78bfa60", borderRadius:6, cursor:"pointer", fontFamily:"inherit", fontSize:13, fontWeight:700, letterSpacing:1.5, padding:"13px 0" }}>
+                  📊 VISUALIZAR REPORTE
+                </button>
+                <div style={{ background:"#080808", border:"1px solid #00e67620", borderRadius:6, padding:"14px" }}>
+                  <div style={{ fontFamily:"Orbitron,monospace", fontSize:10, color:"#00e676", letterSpacing:2, marginBottom:10 }}>▲ ÚLTIMAS VENTAS</div>
+                  {[...data.ventas].reverse().slice(0,5).map(v => (
+                    <div key={v.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"9px 0", borderBottom:"1px solid #ffffff08" }}>
+                      <div>
+                        <div style={{ fontSize:13, fontWeight:700, color:"#ccc" }}>{v.cliente_nombre}</div>
+                        <div style={{ fontSize:10, color:"#333" }}>{v.codigo} · {v.fecha}</div>
+                      </div>
+                      <div style={{ textAlign:"right" }}>
+                        <div style={{ color:"#00e676", fontWeight:900, fontSize:13 }}>{fmt(v.total)}</div>
+                        <Tag color={v.estado==="Pagado"?"#00e676":"#ff3d57"}>{v.estado}</Tag>
+                      </div>
+                    </div>
+                  ))}
+                  {data.ventas.length===0 && <div style={{ color:"#333", fontSize:12 }}>Sin ventas registradas</div>}
+                </div>
+              </div>
+
+              <div className="grid-chart hide-mobile" style={{ display:"grid", gap:16, marginBottom:16 }}>
                 <div className="card-hover border-glow" style={{ background:"#080808", border:"1px solid #00d4ff20", borderRadius:6, padding:"24px" }}>
                   {/* Header del gráfico con botón PDF */}
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
@@ -2150,7 +2206,17 @@ export default function NexuStoreRD() {
         );
       })()}
 
-      {/* ── MODAL REPORTE POR RANGO DE FECHAS ─────────────────────────── */}
+      {/* ═══ BOTTOM NAV — solo móvil ══════════════════════════════════════ */}
+      <div className="bottomnav">
+        {NAV.map(item => (
+          <button key={item.id} className="bottomnav-item"
+            onClick={()=>{ setView(item.id); setSearch(""); }}
+            style={{ color: view===item.id?"#00d4ff":"#333" }}>
+            <span className="bottomnav-icon">{item.icon}</span>
+            <span className="bottomnav-label" style={{ color: view===item.id?"#00d4ff":"#333" }}>{item.label}</span>
+          </button>
+        ))}
+      </div>
       {reporteModal && (
         <ReporteModal
           data={data}
@@ -2185,7 +2251,7 @@ function Tag({ children, color }) {
 }
 function Table({ headers, children }) {
   return (
-    <div style={{ background:"#080808", border:"1px solid #00d4ff15", borderRadius:6, overflow:"hidden" }}>
+    <div className="table-scroll" style={{ background:"#080808", border:"1px solid #00d4ff15", borderRadius:6, overflow:"hidden" }}>
       <table style={{ width:"100%", borderCollapse:"collapse" }}>
         <thead>
           <tr style={{ background:"#050505" }}>
@@ -2208,16 +2274,16 @@ function SearchBar({ value, onChange, placeholder }) {
 }
 function Modal({ title, color, onClose, onSave, saveLabel, children }) {
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.92)", zIndex:100, display:"flex", alignItems:"center", justifyContent:"center", padding:20, backdropFilter:"blur(8px)" }}
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.92)", zIndex:100, display:"flex", alignItems:"center", justifyContent:"center", padding:16, backdropFilter:"blur(8px)" }}
       onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div className="fade-in" style={{ background:"#080808", border:`1px solid ${color}30`, borderRadius:8, width:"100%", maxWidth:640, maxHeight:"90vh", overflowY:"auto", boxShadow:`0 0 60px ${color}20` }}>
-        <div style={{ padding:"22px 28px", borderBottom:`1px solid ${color}20` }}>
-          <h2 style={{ fontFamily:"Orbitron,monospace", fontSize:15, fontWeight:900, color, letterSpacing:2 }}>{title}</h2>
+      <div className="fade-in modal-inner" style={{ background:"#080808", border:`1px solid ${color}30`, borderRadius:8, width:"100%", maxWidth:640, maxHeight:"92vh", overflowY:"auto", boxShadow:`0 0 60px ${color}20` }}>
+        <div style={{ padding:"18px 22px", borderBottom:`1px solid ${color}20`, position:"sticky", top:0, background:"#080808", zIndex:5 }}>
+          <h2 style={{ fontFamily:"Orbitron,monospace", fontSize:14, fontWeight:900, color, letterSpacing:2 }}>{title}</h2>
         </div>
-        <div style={{ padding:"22px 28px", display:"flex", flexDirection:"column", gap:14 }}>{children}</div>
-        <div style={{ padding:"16px 28px", borderTop:`1px solid ${color}15`, display:"flex", gap:10, justifyContent:"flex-end" }}>
-          <button className="btn-glow" onClick={onClose} style={{ background:"transparent", color:"#444", border:"1px solid #222", padding:"10px 20px", borderRadius:4, cursor:"pointer", fontFamily:"inherit", fontSize:12, letterSpacing:1 }}>CANCELAR</button>
-          <button className="btn-glow" onClick={onSave} style={{ background:`${color}20`, color, border:`1px solid ${color}`, padding:"10px 24px", borderRadius:4, cursor:"pointer", fontFamily:"inherit", fontSize:12, fontWeight:700, letterSpacing:1.5, boxShadow:`0 0 15px ${color}30` }}>✓ {saveLabel}</button>
+        <div style={{ padding:"18px 22px", display:"flex", flexDirection:"column", gap:14 }}>{children}</div>
+        <div style={{ padding:"14px 22px", borderTop:`1px solid ${color}15`, display:"flex", gap:10, justifyContent:"flex-end", position:"sticky", bottom:0, background:"#080808" }}>
+          <button className="btn-glow" onClick={onClose} style={{ background:"transparent", color:"#444", border:"1px solid #222", padding:"12px 20px", borderRadius:4, cursor:"pointer", fontFamily:"inherit", fontSize:13, letterSpacing:1 }}>CANCELAR</button>
+          <button className="btn-glow" onClick={onSave} style={{ background:`${color}20`, color, border:`1px solid ${color}`, padding:"12px 24px", borderRadius:4, cursor:"pointer", fontFamily:"inherit", fontSize:13, fontWeight:700, letterSpacing:1.5, boxShadow:`0 0 15px ${color}30` }}>✓ {saveLabel}</button>
         </div>
       </div>
     </div>
@@ -2239,7 +2305,7 @@ function Select({ children, style={}, ...props }) {
   return <select {...props} style={{ width:"100%", padding:"10px 14px", border:"1px solid #1a1a1a", borderRadius:4, fontSize:12, background:"#0a0a0a", color:"#e0e0e0", outline:"none", cursor:"pointer", ...style }}>{children}</select>;
 }
 function Grid2({ children }) {
-  return <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>{children}</div>;
+  return <div className="grid2-form" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>{children}</div>;
 }
 
 
