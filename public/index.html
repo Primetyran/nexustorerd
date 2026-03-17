@@ -2,12 +2,53 @@
 <html lang="es">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#00d4ff" />
+    <meta name="description" content="NexuStoreRD — Sistema de Gestión de Accesorios de PC" />
+
+    <!-- PWA manifest -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- iPhone / iPad — modo app completo -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="NexuStoreRD" />
+
+    <!-- Íconos para iPhone -->
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png" />
+
+    <!-- Ícono estándar -->
+    <link rel="icon" type="image/png" href="/icons/icon-192.png" />
+
     <title>NexuStoreRD</title>
+
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { background: #000; }
+      #root { min-height: 100vh; min-height: -webkit-fill-available; }
+      /* Soporte para el notch del iPhone */
+      body { padding-top: env(safe-area-inset-top); }
+    </style>
   </head>
   <body>
-    <noscript>Necesitas JavaScript para correr esta aplicación.</noscript>
+    <noscript>Necesitas habilitar JavaScript para usar NexuStoreRD.</noscript>
     <div id="root"></div>
+
+    <!-- Registrar Service Worker -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('/service-worker.js')
+            .then(function(reg) {
+              console.log('NexuStoreRD SW registrado:', reg.scope);
+            })
+            .catch(function(err) {
+              console.log('SW error:', err);
+            });
+        });
+      }
+    </script>
   </body>
 </html>
