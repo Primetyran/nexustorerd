@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 // ═══════════════════════════════════════════════════════════
-// NEXUSTORERD v5.3 — Sistema de Gestión | by Jeffrey Vargas
-// NOVEDADES v5.3: PDF generado con jsPDF sin popups ni window.open/print
+// NEXUSTORERD v5.4 — Sistema de Gestión | by Jeffrey Vargas
+// NOVEDADES v5.4: Reporte usa mismo patrón que cotizaciones — modal interno + PDF en pestaña nueva
 // ═══════════════════════════════════════════════════════════
 const DEMO_DATA = {
  productos: [
@@ -33,7 +33,7 @@ const DEMO_DATA = {
  cotizaciones: [],
 };
 const CATEGORIAS_DEFAULT = ["Mouse","Teclado","Audio","Monitor","Almacenamiento","Accesorios","Cámara","Otro"];
-const STORAGE_KEY = "nexustorerd-v53";
+const STORAGE_KEY = "nexustorerd-v54";
 const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 export default function NexuStoreRD() {
  const [data, setData] = useState(null);
@@ -770,7 +770,7 @@ export default function NexuStoreRD() {
  NEXU<span style={{ color:"#ff6b35" }}>STORE</span>
  </div>
  <div style={{ color:"#ff6b35", fontSize:11, letterSpacing:4, marginTop:4, fontWeight:700 }}>RD</div>
- <div style={{ fontSize:10, color:"#333", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v5.3</div>
+ <div style={{ fontSize:10, color:"#333", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v5.4</div>
  </div>
  <div style={{ padding:"0 12px", flex:1 }}>
  {NAV.map(item => (
@@ -2134,10 +2134,9 @@ function Select({ children, style={}, ...props }) {
 function Grid2({ children }) {
  return <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>{children}</div>;
 }
-// ── ReporteModal — selector de rango + vista previa + imprimir (sin popups) ──
+// ── ReporteModal — igual patrón que cotizaciones ─────────────────────────────
 function ReporteModal({ data, fmt, MESES, rango, setRango, onClose }) {
  const [vista, setVista] = React.useState(false);
- const printRef = React.useRef(null);
  const filtrar = () => {
  if (!rango.desde || !rango.hasta) return null;
  const desde = new Date(rango.desde);
@@ -2149,7 +2148,7 @@ function ReporteModal({ data, fmt, MESES, rango, setRango, onClose }) {
  const totalC = compras.reduce((s,c)=>s+(c.total||0),0);
  const ganancia= totalV-totalC;
  const rentab = totalC>0?((ganancia/totalC)*100).toFixed(1):0;
- const deudas = data.deudas.filter(d=>{ const f=new Date(d.fecha_registro); return f>=desde&&f<=hasta&&d.estado!=="Pagado"; });
+ const deudas = data.deudas.filter(d=>{ const f=new Date(d.fecha_registro||""); return f>=desde&&f<=hasta&&d.estado!=="Pagado"; });
  const totalD = deudas.reduce((s,d)=>s+(d.monto-d.monto_pagado),0);
  const mesesData = MESES.map((m,i)=>({
  mes:m,
@@ -2164,148 +2163,136 @@ function ReporteModal({ data, fmt, MESES, rango, setRango, onClose }) {
  };
  const res = filtrar();
  const rangoValido = rango.desde && rango.hasta && new Date(rango.desde)<=new Date(rango.hasta);
- const generarPDF = async () => {
+ // ── Mismo patrón exacto que exportCotizacionPDF ──
+ const abrirPDF = () => {
  if (!res) return;
- // Cargar jsPDF dinámicamente desde CDN
- if (!window.jspdf) {
- await new Promise((resolve, reject) => {
- const s = document.createElement("script");
- s.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
- s.onload = resolve;
- s.onerror = reject;
- document.head.appendChild(s);
- });
- }
- const { jsPDF } = window.jspdf;
- const doc = new jsPDF({ orientation:"portrait", unit:"mm", format:"a4" });
- const ancho = doc.internal.pageSize.getWidth();
- const margen = 15;
- let y = 20;
- const fmtNum = n => new Intl.NumberFormat("es-DO",{style:"currency",currency:"DOP",maximumFractionDigits:0}).format(n||0);
- const addTitle = (txt, size=11, color=[0,100,210]) => {
- doc.setFontSize(size); doc.setTextColor(...color); doc.setFont(undefined,"bold");
- doc.text(txt, margen, y); y += size*0.5;
- };
- const addLine = () => { doc.setDrawColor(50,50,50); doc.line(margen, y, ancho-margen, y); y += 4; };
- const addRow = (label, val, colorVal=[200,200,200]) => {
- doc.setFontSize(9); doc.setFont(undefined,"normal"); doc.setTextColor(130,130,130);
- doc.text(label, margen, y);
- doc.setTextColor(...colorVal); doc.setFont(undefined,"bold");
- doc.text(String(val), ancho-margen, y, {align:"right"});
- y += 6;
- };
- // ── Encabezado ──
- doc.setFillColor(15,15,40); doc.rect(0,0,ancho,28,"F");
- doc.setFontSize(18); doc.setFont(undefined,"bold"); doc.setTextColor(0,212,255);
- doc.text("NEXU", margen, 13);
- doc.setTextColor(255,107,53); doc.text("STORE", margen+22, 13);
- doc.setTextColor(255,107,53); doc.text(" RD", margen+50, 13);
- doc.setFontSize(8); doc.setTextColor(100,100,100); doc.setFont(undefined,"normal");
- doc.text("REPORTE FINANCIERO POR PERÍODO", margen, 20);
- doc.text(`Período: ${rango.desde} al ${rango.hasta}`, ancho-margen, 13, {align:"right"});
- doc.text(`Generado: ${new Date().toLocaleDateString("es-DO")}`, ancho-margen, 20, {align:"right"});
- y = 36;
- // ── Resumen 4 tarjetas ──
- addTitle("RESUMEN FINANCIERO", 11, [0,212,255]); y += 2;
- const cards = [
- {l:"Ingresos Totales", v:fmtNum(res.totalV), c:[0,230,118]},
- {l:"Gastos Totales", v:fmtNum(res.totalC), c:[255,107,53]},
- {l:"Ganancia Neta", v:fmtNum(res.ganancia), c:res.ganancia>=0?[0,212,255]:[255,61,87]},
- {l:"Rentabilidad", v:`${res.rentab}%`, c:res.rentab>0?[0,230,118]:[255,61,87]},
- ];
- const cw=(ancho-margen*2-9)/4;
- cards.forEach((c,i)=>{
- const x=margen+i*(cw+3);
- doc.setFillColor(20,20,30); doc.roundedRect(x,y,cw,18,2,2,"F");
- doc.setFontSize(13); doc.setFont(undefined,"bold"); doc.setTextColor(...c.c);
- doc.text(c.v, x+cw/2, y+9, {align:"center"});
- doc.setFontSize(7); doc.setFont(undefined,"normal"); doc.setTextColor(80,80,80);
- doc.text(c.l, x+cw/2, y+14, {align:"center"});
- });
- y += 24;
- addLine();
- // ── Ventas del período ──
- addTitle(`VENTAS DEL PERÍODO (${res.ventas.length})`, 10, [0,230,118]); y += 2;
- if (res.ventas.length===0) { doc.setFontSize(9); doc.setTextColor(80,80,80); doc.text("Sin ventas en este período", margen, y); y+=6; }
- res.ventas.forEach(v=>{
- if(y>270){ doc.addPage(); y=20; }
- doc.setFontSize(9); doc.setFont(undefined,"bold"); doc.setTextColor(200,200,200);
- doc.text(`${v.codigo} — ${v.cliente_nombre}`, margen, y);
- doc.setTextColor(0,230,118); doc.text(fmtNum(v.total), ancho-margen, y, {align:"right"});
- doc.setFontSize(7); doc.setFont(undefined,"normal"); doc.setTextColor(80,80,80);
- doc.text(`${v.fecha} · ${v.estado}`, margen, y+4);
- y += 9;
- });
- y += 2; addLine();
- // ── Compras del período ──
- addTitle(`COMPRAS DEL PERÍODO (${res.compras.length})`, 10, [255,107,53]); y += 2;
- if (res.compras.length===0) { doc.setFontSize(9); doc.setTextColor(80,80,80); doc.text("Sin compras en este período", margen, y); y+=6; }
- res.compras.forEach(c=>{
- if(y>270){ doc.addPage(); y=20; }
- doc.setFontSize(9); doc.setFont(undefined,"bold"); doc.setTextColor(200,200,200);
- doc.text(`${c.codigo} — ${c.proveedor}`, margen, y);
- doc.setTextColor(255,107,53); doc.text(fmtNum(c.total), ancho-margen, y, {align:"right"});
- doc.setFontSize(7); doc.setFont(undefined,"normal"); doc.setTextColor(80,80,80);
- doc.text(c.fecha, margen, y+4);
- y += 9;
- });
- y += 2; addLine();
- // ── Margen por producto ──
- if(y>220){ doc.addPage(); y=20; }
- addTitle("MARGEN POR PRODUCTO — TOP 8", 10, [0,212,255]); y += 2;
- res.topProds.forEach((p,i)=>{
- if(y>270){ doc.addPage(); y=20; }
- const color = p.mp>=60?[0,230,118]:p.mp>=30?[255,214,0]:[255,61,87];
- doc.setFontSize(9); doc.setFont(undefined,"bold"); doc.setTextColor(200,200,200);
- doc.text(`${i+1}. ${p.nombre}`, margen, y);
- doc.setTextColor(...color); doc.text(`${p.mp.toFixed(1)}%`, ancho-margen, y, {align:"right"});
- doc.setFontSize(7); doc.setFont(undefined,"normal"); doc.setTextColor(80,80,80);
- doc.text(`Costo: ${fmtNum(p.precio_compra)} · Venta: ${fmtNum(p.precio_venta)} · Ganancia: ${fmtNum(p.precio_venta-p.precio_compra)}`, margen, y+4);
- // barra de margen
- const bw=ancho-margen*2-30;
- doc.setFillColor(30,30,30); doc.rect(margen, y+6, bw, 2, "F");
- doc.setFillColor(...color); doc.rect(margen, y+6, bw*Math.min(1,p.mp/100), 2, "F");
- y += 12;
- });
- // ── Deudas ──
- if(res.deudas.length>0){
- y += 2; addLine();
- if(y>240){ doc.addPage(); y=20; }
- addTitle(`DEUDAS PENDIENTES (${res.deudas.length}) — ${fmtNum(res.totalD)}`, 10, [255,61,87]); y+=2;
- res.deudas.forEach(d=>{
- if(y>270){ doc.addPage(); y=20; }
- doc.setFontSize(9); doc.setFont(undefined,"bold"); doc.setTextColor(200,200,200);
- doc.text(d.cliente_nombre, margen, y);
- doc.setTextColor(255,214,0); doc.text(fmtNum(d.monto-d.monto_pagado), ancho-margen, y, {align:"right"});
- doc.setFontSize(7); doc.setFont(undefined,"normal"); doc.setTextColor(80,80,80);
- doc.text(d.descripcion, margen, y+4);
- y += 9;
- });
- }
- // ── Footer ──
- const pags = doc.internal.getNumberOfPages();
- for(let i=1;i<=pags;i++){
- doc.setPage(i);
- doc.setFontSize(7); doc.setTextColor(50,50,50);
- doc.text("NexuStoreRD — Accesorios de PC | Santo Domingo, Rep. Dominicana", margen, 292);
- doc.text(`Página ${i} de ${pags}`, ancho-margen, 292, {align:"right"});
- }
- doc.save(`NexuStoreRD_Reporte_${rango.desde}_${rango.hasta}.pdf`);
+ const barH = 130;
+ const barsHTML = res.mesesData.map(m=>{
+ const hV = Math.round((m.ventas/res.maxBar)*barH);
+ const hC = Math.round((m.compras/res.maxBar)*barH);
+ const gan = m.ventas - m.compras;
+ return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
+ <div style="width:100%;display:flex;gap:2px;align-items:flex-end;height:${barH}px;">
+ <div title="Ventas: ${fmt(m.ventas)}" style="flex:1;height:${hV||1}px;background:${m.ventas>0?'#2563eb':'#e5e7eb'};border-radius:2px 2px 0 0;min-height:${m.ventas>0?2:0}px;"></div>
+ <div title="Gastos: ${fmt(m.compras)}" style="flex:1;height:${hC||1}px;background:${m.compras>0?'#ea580c':'#e5e7eb'};border-radius:2px 2px 0 0;min-height:${m.compras>0?2:0}px;"></div>
+ </div>
+ <div style="font-size:8px;color:#888;margin-top:2px;">${m.mes}</div>
+ ${m.ventas>0||m.compras>0?`<div style="font-size:7px;color:${gan>=0?'#16a34a':'#dc2626'};font-weight:700;">${gan>=0?'+':''}${Math.round(gan/1000)}K</div>`:''}
+ </div>`;
+ }).join('');
+ const w = window.open('', '_blank');
+ w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+ <title>Reporte NexuStoreRD ${rango.desde} al ${rango.hasta}</title>
+ <style>
+ *{box-sizing:border-box;margin:0;padding:0;}
+ body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#222;padding:40px;font-size:13px;}
+ .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:18px;border-bottom:3px solid #2563eb;}
+ .logo{font-size:26px;font-weight:900;color:#2563eb;letter-spacing:2px;}
+ .logo span{color:#f97316;}
+ .badge{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 20px;text-align:right;}
+ .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:28px;}
+ .card{border-radius:8px;padding:16px;border-left:4px solid;}
+ .card-val{font-size:18px;font-weight:900;margin-bottom:4px;}
+ .card-lbl{font-size:10px;color:#888;letter-spacing:1px;text-transform:uppercase;}
+ .section-title{font-size:11px;font-weight:700;color:#888;letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid #f0f0f0;}
+ .chart-wrap{display:flex;align-items:flex-end;gap:4px;height:${barH+20}px;background:#f8fafc;border-radius:8px;padding:14px 10px 8px;margin-bottom:24px;}
+ .legend{display:flex;gap:14px;margin-bottom:8px;}
+ .legend span{display:flex;align-items:center;gap:5px;font-size:11px;color:#555;}
+ .dot{width:10px;height:10px;border-radius:2px;display:inline-block;}
+ .grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px;}
+ table{width:100%;border-collapse:collapse;margin-bottom:20px;}
+ th{background:#2563eb;color:#fff;padding:9px 12px;text-align:left;font-size:11px;letter-spacing:1px;}
+ th:last-child,td:last-child{text-align:right;}
+ td{padding:9px 12px;font-size:12px;border-bottom:1px solid #f0f0f0;}
+ tr:nth-child(even) td{background:#f9f7ff;}
+ .bar-wrap{background:#f0f0f0;border-radius:2px;height:6px;margin-top:4px;}
+ .bar-fill{height:6px;border-radius:2px;}
+ .footer{margin-top:36px;padding-top:16px;border-top:1px solid #eee;display:flex;justify-content:space-between;font-size:11px;color:#aaa;}
+ @media print{.no-print{display:none!important;}}
+ </style></head><body>
+ <div class="no-print" style="text-align:center;margin-bottom:22px;">
+ <button onclick="window.print()" style="background:#2563eb;color:#fff;border:none;padding:10px 28px;border-radius:6px;font-size:14px;cursor:pointer;font-weight:700;margin-right:10px;"> IMPRIMIR / GUARDAR PDF</button>
+ <button onclick="window.close()" style="background:#f3f4f6;color:#555;border:1px solid #ddd;padding:10px 18px;border-radius:6px;font-size:14px;cursor:pointer;">CERRAR</button>
+ </div>
+ <div class="header">
+ <div>
+ <div class="logo">NEXU<span>STORE</span> <span style="color:#f97316;">RD</span></div>
+ <div style="font-size:11px;color:#888;margin-top:5px;letter-spacing:2px;">REPORTE FINANCIERO POR PERÍODO</div>
+ <div style="font-size:11px;color:#aaa;margin-top:4px;">Generado el ${new Date().toLocaleDateString("es-DO",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}</div>
+ </div>
+ <div class="badge">
+ <div style="font-size:10px;color:#888;letter-spacing:1px;">PERÍODO</div>
+ <div style="font-size:15px;font-weight:900;color:#2563eb;margin-top:3px;">${rango.desde}</div>
+ <div style="font-size:11px;color:#888;margin-top:2px;">al ${rango.hasta}</div>
+ </div>
+ </div>
+ <div class="cards">
+ ${[
+ {l:"Ingresos Totales", v:fmt(res.totalV), c:"#16a34a", bg:"#f0fdf4"},
+ {l:"Gastos Totales", v:fmt(res.totalC), c:"#ea580c", bg:"#fff7ed"},
+ {l:"Ganancia Neta", v:fmt(res.ganancia), c:res.ganancia>=0?"#2563eb":"#dc2626", bg:"#eff6ff"},
+ {l:"Rentabilidad", v:`${res.rentab}%`, c:res.rentab>0?"#16a34a":"#dc2626", bg:"#f0fdf4"},
+ ].map(s=>`<div class="card" style="border-left-color:${s.c};background:${s.bg};"><div class="card-val" style="color:${s.c};">${s.v}</div><div class="card-lbl">${s.l}</div></div>`).join('')}
+ </div>
+ <div class="section-title"> Ventas vs Gastos por mes</div>
+ <div class="legend">
+ <span><span class="dot" style="background:#2563eb;"></span>Ventas</span>
+ <span><span class="dot" style="background:#ea580c;"></span>Gastos</span>
+ <span style="margin-left:auto;font-size:10px;color:#aaa;">Número = ganancia del mes en miles (K) DOP</span>
+ </div>
+ <div class="chart-wrap">${barsHTML}</div>
+ <div class="grid2">
+ <div>
+ <div class="section-title">▲ Ventas del período (${res.ventas.length})</div>
+ <table><thead><tr><th>CÓDIGO</th><th>CLIENTE</th><th>FECHA</th><th>TOTAL</th><th>ESTADO</th></tr></thead><tbody>
+ ${res.ventas.map(v=>`<tr><td>${v.codigo}</td><td>${v.cliente_nombre}</td><td>${v.fecha}</td><td style="color:#16a34a;font-weight:700;">${fmt(v.total)}</td><td style="color:${v.estado==='Pagado'?'#16a34a':'#dc2626'};font-weight:700;">${v.estado}</td></tr>`).join('')}
+ ${res.ventas.length===0?'<tr><td colspan="5" style="color:#aaa;text-align:center;">Sin ventas en este período</td></tr>':''}
+ </tbody></table>
+ </div>
+ <div>
+ <div class="section-title">▼ Compras del período (${res.compras.length})</div>
+ <table><thead><tr><th>CÓDIGO</th><th>PROVEEDOR</th><th>FECHA</th><th>TOTAL</th></tr></thead><tbody>
+ ${res.compras.map(c=>`<tr><td>${c.codigo}</td><td>${c.proveedor}</td><td>${c.fecha}</td><td style="color:#ea580c;font-weight:700;">${fmt(c.total)}</td></tr>`).join('')}
+ ${res.compras.length===0?'<tr><td colspan="4" style="color:#aaa;text-align:center;">Sin compras en este período</td></tr>':''}
+ </tbody></table>
+ </div>
+ </div>
+ <div class="section-title"> Margen por producto — Top 8</div>
+ <table><thead><tr><th>#</th><th>PRODUCTO</th><th>CATEGORÍA</th><th>COSTO</th><th>P. VENTA</th><th>GANANCIA/UND</th><th>MARGEN %</th><th>STOCK</th></tr></thead><tbody>
+ ${res.topProds.map((p,i)=>`<tr>
+ <td>${i+1}</td><td><strong>${p.nombre}</strong></td><td>${p.categoria}</td>
+ <td>${fmt(p.precio_compra)}</td><td>${fmt(p.precio_venta)}</td>
+ <td style="color:#16a34a;font-weight:700;">${fmt(p.precio_venta-p.precio_compra)}</td>
+ <td style="font-weight:900;color:${p.mp>=60?'#16a34a':p.mp>=30?'#d97706':'#dc2626'};">${p.mp.toFixed(1)}%</td>
+ <td style="color:${p.stock<=p.stock_minimo?'#dc2626':'#222'};">${p.stock}</td>
+ </tr>`).join('')}
+ </tbody></table>
+ ${res.deudas.length>0?`
+ <div class="section-title">◆ Deudas pendientes del período (${res.deudas.length})</div>
+ <table><thead><tr><th>CLIENTE</th><th>DESCRIPCIÓN</th><th>MONTO</th><th>PAGADO</th><th>PENDIENTE</th></tr></thead><tbody>
+ ${res.deudas.map(d=>`<tr><td>${d.cliente_nombre}</td><td>${d.descripcion}</td><td>${fmt(d.monto)}</td><td style="color:#16a34a;">${fmt(d.monto_pagado)}</td><td style="color:#dc2626;font-weight:700;">${fmt(d.monto-d.monto_pagado)}</td></tr>`).join('')}
+ </tbody></table>`:''}
+ <div class="footer">
+ <span><strong>NexuStoreRD</strong> — Accesorios de PC | Santo Domingo, República Dominicana</span>
+ <span>Período: ${rango.desde} al ${rango.hasta}</span>
+ </div>
+ </body></html>`);
+ w.document.close();
  };
  return (
- <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.95)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(8px)"}}
+ <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.92)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(8px)"}}
  onClick={e=>e.target===e.currentTarget&&onClose()}>
- <div className="fade-in" style={{background:"#080808",border:"1px solid #a78bfa30",borderRadius:12,width:"100%",maxWidth:vista&&res?920:500,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 0 60px #a78bfa15",transition:"max-width .35s"}}>
- {/* Header */}
- <div style={{padding:"20px 28px",borderBottom:"1px solid #a78bfa20",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,background:"#080808",zIndex:10}}>
+ <div className="fade-in" style={{background:"#080808",border:"1px solid #a78bfa30",borderRadius:8,width:"100%",maxWidth:vista&&res?860:460,maxHeight:"90vh",overflowY:"auto",boxShadow:"0 0 60px #a78bfa20",transition:"max-width .3s"}}>
+ {/* Header fijo */}
+ <div style={{padding:"22px 28px",borderBottom:"1px solid #a78bfa20",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,background:"#080808",zIndex:10}}>
  <div>
- <h2 style={{fontFamily:"Orbitron,monospace",fontSize:15,fontWeight:900,color:"#a78bfa",letterSpacing:2}}> GENERAR REPORTE</h2>
- <div style={{fontSize:10,color:"#444",marginTop:4,letterSpacing:1}}>Selecciona el rango de fechas</div>
+ <h2 style={{fontFamily:"Orbitron,monospace",fontSize:15,fontWeight:900,color:"#a78bfa",letterSpacing:2}}> REPORTE FINANCIERO</h2>
+ <div style={{fontSize:10,color:"#444",marginTop:4,letterSpacing:1}}>Selecciona el rango de fechas a analizar</div>
  </div>
- <button onClick={onClose} style={{background:"none",border:"1px solid #ff3d5740",borderRadius:4,color:"#ff3d57",cursor:"pointer",fontFamily:"inherit",fontSize:12,padding:"6px 12px"}}>✕ CERRAR</button>
+ <button onClick={onClose} style={{background:"transparent",color:"#444",border:"1px solid #222",padding:"10px 16px",borderRadius:4,cursor:"pointer",fontFamily:"inherit",fontSize:12}}>CANCELAR</button>
  </div>
- <div style={{padding:"22px 28px",display:"flex",flexDirection:"column",gap:16}}>
- {/* Selector fechas */}
+ <div style={{padding:"22px 28px",display:"flex",flexDirection:"column",gap:14}}>
+ {/* Fechas */}
  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
  <div>
  <label style={{fontSize:10,fontWeight:700,color:"#333",display:"block",marginBottom:6,letterSpacing:1.5,fontFamily:"Orbitron,monospace"}}>DESDE *</label>
@@ -2318,76 +2305,59 @@ function ReporteModal({ data, fmt, MESES, rango, setRango, onClose }) {
  style={{width:"100%",padding:"10px 14px",border:"1px solid #a78bfa30",borderRadius:4,fontSize:12,background:"#0a0a0a",color:"#e0e0e0",outline:"none",fontFamily:"inherit"}} />
  </div>
  </div>
- {/* Botones acción */}
+ {/* Botones */}
  {rangoValido && (
- <div style={{display:"flex",gap:10}}>
+ <div style={{display:"flex",gap:10,paddingTop:4}}>
  <button onClick={()=>setVista(true)} className="btn-glow"
- style={{flex:1,background:"#00d4ff20",color:"#00d4ff",border:"1px solid #00d4ff60",borderRadius:4,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,letterSpacing:1.5,padding:"12px 0",textTransform:"uppercase"}}>
+ style={{flex:1,background:"#00d4ff20",color:"#00d4ff",border:"1px solid #00d4ff60",borderRadius:4,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,letterSpacing:1.5,padding:"11px 0",textTransform:"uppercase"}}>
  VISUALIZAR
  </button>
- {vista && res && (
- <button onClick={generarPDF} className="btn-glow"
- style={{flex:1,background:"#a78bfa20",color:"#a78bfa",border:"1px solid #a78bfa60",borderRadius:4,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,letterSpacing:1.5,padding:"12px 0",textTransform:"uppercase"}}>
- DESCARGAR PDF
+ <button onClick={abrirPDF} className="btn-glow"
+ style={{flex:1,background:"#a78bfa20",color:"#a78bfa",border:"1px solid #a78bfa60",borderRadius:4,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,letterSpacing:1.5,padding:"11px 0",textTransform:"uppercase"}}>
+ GENERAR PDF
  </button>
- )}
  </div>
  )}
- {/* Error de rango */}
- {!rangoValido && rango.desde && rango.hasta && (
+ {!rangoValido&&rango.desde&&rango.hasta&&(
  <div style={{background:"#ff3d5710",border:"1px solid #ff3d5730",borderRadius:4,padding:"10px 14px",fontSize:12,color:"#ff3d57"}}>
  ⚠ La fecha "Desde" debe ser anterior a "Hasta"
  </div>
  )}
- {/* Vista previa + contenido imprimible */}
+ {/* Vista previa */}
  {vista && res && (
- <div className="fade-in">
- <div style={{height:1,background:"linear-gradient(to right,transparent,#a78bfa40,transparent)",marginBottom:16}} />
- {/* Contenido del reporte — este div es el que se imprime */}
- <div ref={printRef}>
- {/* Header del reporte */}
- <div className="rpt-header" style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18,paddingBottom:14,borderBottom:"2px solid #a78bfa40"}}>
- <div>
- <div style={{fontFamily:"Orbitron,monospace",fontSize:18,fontWeight:900,color:"#00d4ff",letterSpacing:3}}>NEXU<span style={{color:"#ff6b35"}}>STORE</span> <span style={{color:"#ff6b35"}}>RD</span></div>
- <div style={{fontSize:10,color:"#444",marginTop:4,letterSpacing:2}}>REPORTE FINANCIERO POR PERÍODO</div>
- <div style={{fontSize:10,color:"#333",marginTop:3}}>{new Date().toLocaleDateString("es-DO",{weekday:"long",year:"numeric",month:"long",day:"numeric"}).toUpperCase()}</div>
+ <div className="fade-in" style={{display:"flex",flexDirection:"column",gap:12}}>
+ <div style={{height:1,background:"linear-gradient(to right,transparent,#a78bfa40,transparent)"}} />
+ <div style={{fontFamily:"Orbitron,monospace",fontSize:10,color:"#a78bfa",letterSpacing:2}}>
+ ◈ VISTA PREVIA — {rango.desde} AL {rango.hasta}
  </div>
- <div style={{background:"#a78bfa15",border:"1px solid #a78bfa30",borderRadius:6,padding:"10px 16px",textAlign:"right"}}>
- <div style={{fontSize:9,color:"#555",letterSpacing:1}}>PERÍODO</div>
- <div style={{fontSize:14,fontWeight:900,color:"#a78bfa"}}>{rango.desde}</div>
- <div style={{fontSize:11,color:"#555"}}>al {rango.hasta}</div>
- </div>
- </div>
- {/* Tarjetas resumen */}
- <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:18}}>
+ {/* Tarjetas */}
+ <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
  {[
- {label:"INGRESOS", val:fmt(res.totalV), color:"#00e676", bg:"#00e67610", border:"#00e67630"},
- {label:"GASTOS", val:fmt(res.totalC), color:"#ff6b35", bg:"#ff6b3510", border:"#ff6b3530"},
- {label:"GANANCIA", val:fmt(res.ganancia), color:res.ganancia>=0?"#00d4ff":"#ff3d57", bg:res.ganancia>=0?"#00d4ff10":"#ff3d5710", border:res.ganancia>=0?"#00d4ff30":"#ff3d5730"},
- {label:"RENTAB.", val:`${res.rentab}%`, color:res.rentab>0?"#00e676":"#ff3d57", bg:"#00e67610", border:"#00e67630"},
+ {l:"INGRESOS", v:fmt(res.totalV), c:"#00e676"},
+ {l:"GASTOS", v:fmt(res.totalC), c:"#ff6b35"},
+ {l:"GANANCIA", v:fmt(res.ganancia), c:res.ganancia>=0?"#00d4ff":"#ff3d57"},
+ {l:"RENTAB.", v:`${res.rentab}%`, c:res.rentab>0?"#00e676":"#ff3d57"},
  ].map(s=>(
- <div key={s.label} style={{background:s.bg,border:`1px solid ${s.border}`,borderLeft:`3px solid ${s.color}`,borderRadius:6,padding:"12px 14px",textAlign:"center"}}>
- <div style={{fontSize:15,fontWeight:900,color:s.color}}>{s.val}</div>
- <div style={{fontSize:8,color:"#333",marginTop:4,letterSpacing:1.5}}>{s.label}</div>
+ <div key={s.l} style={{background:"#0a0a0a",border:`1px solid ${s.c}30`,borderRadius:6,padding:"12px",textAlign:"center"}}>
+ <div style={{fontSize:13,fontWeight:900,color:s.c}}>{s.v}</div>
+ <div style={{fontSize:8,color:"#333",marginTop:3,letterSpacing:1.5}}>{s.l}</div>
  </div>
  ))}
  </div>
- {/* Gráfico barras */}
- <div style={{background:"#0a0a0a",border:"1px solid #a78bfa20",borderRadius:6,padding:16,marginBottom:16}}>
- <div style={{fontFamily:"Orbitron,monospace",fontSize:10,color:"#a78bfa",letterSpacing:2,marginBottom:10}}> VENTAS VS GASTOS POR MES</div>
- <div style={{display:"flex",gap:4,alignItems:"flex-end",height:100}}>
+ {/* Mini gráfico */}
+ <div style={{background:"#0a0a0a",border:"1px solid #a78bfa20",borderRadius:6,padding:14}}>
+ <div style={{fontSize:9,color:"#a78bfa",letterSpacing:2,marginBottom:10,fontFamily:"Orbitron,monospace"}}>VENTAS VS GASTOS POR MES</div>
+ <div style={{display:"flex",gap:3,alignItems:"flex-end",height:80}}>
  {res.mesesData.map((m,i)=>{
- const hV=res.maxBar>0?(m.ventas/res.maxBar)*90:0;
- const hC=res.maxBar>0?(m.compras/res.maxBar)*90:0;
- const gan=m.ventas-m.compras;
+ const hV=res.maxBar>0?(m.ventas/res.maxBar)*72:0;
+ const hC=res.maxBar>0?(m.compras/res.maxBar)*72:0;
  return (
- <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
- {(m.ventas>0||m.compras>0) && <div style={{fontSize:7,color:gan>=0?"#00e676":"#ff3d57",fontWeight:700}}>{gan>=0?"+":""}{Math.round(gan/1000)}K</div>}
- <div style={{width:"100%",display:"flex",gap:1,alignItems:"flex-end",height:80}}>
+ <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:1}}>
+ <div style={{width:"100%",display:"flex",gap:1,alignItems:"flex-end",height:72}}>
  <div style={{flex:1,height:`${hV||1}px`,minHeight:m.ventas>0?2:0,background:m.ventas>0?"#00d4ff":"#1a1a1a",borderRadius:"1px 1px 0 0"}} />
  <div style={{flex:1,height:`${hC||1}px`,minHeight:m.compras>0?2:0,background:m.compras>0?"#ff6b35":"#1a1a1a",borderRadius:"1px 1px 0 0"}} />
  </div>
- <div style={{fontSize:7,color:"#333"}}>{m.mes}</div>
+ <div style={{fontSize:6,color:"#333"}}>{m.mes}</div>
  </div>
  );
  })}
@@ -2395,109 +2365,49 @@ function ReporteModal({ data, fmt, MESES, rango, setRango, onClose }) {
  <div style={{display:"flex",gap:14,marginTop:8}}>
  <span style={{fontSize:9,color:"#00d4ff",display:"flex",alignItems:"center",gap:4}}><span style={{width:8,height:8,background:"#00d4ff",borderRadius:1,display:"inline-block"}}/> Ventas</span>
  <span style={{fontSize:9,color:"#ff6b35",display:"flex",alignItems:"center",gap:4}}><span style={{width:8,height:8,background:"#ff6b35",borderRadius:1,display:"inline-block"}}/> Gastos</span>
- <span style={{fontSize:9,color:"#444",marginLeft:"auto"}}>Número = ganancia del mes en miles (K) DOP</span>
  </div>
  </div>
- {/* Ventas y Compras lado a lado */}
- <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
+ {/* Ventas y Compras */}
+ <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
  <div style={{background:"#0a0a0a",border:"1px solid #00e67620",borderRadius:6,padding:12}}>
- <div style={{color:"#00e676",fontFamily:"Orbitron,monospace",fontSize:9,letterSpacing:1.5,marginBottom:10}}>▲ VENTAS ({res.ventas.length})</div>
- {res.ventas.length===0 && <div style={{color:"#333",fontSize:11,padding:"8px 0"}}>Sin ventas en este período</div>}
- {res.ventas.map(v=>(
- <div key={v.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #ffffff06",fontSize:11}}>
- <div>
- <div style={{color:"#ccc",fontWeight:700}}>{v.cliente_nombre}</div>
- <div style={{color:"#333",fontSize:10}}>{v.codigo} · {v.fecha}</div>
- </div>
- <div style={{textAlign:"right"}}>
- <div style={{color:"#00e676",fontWeight:900}}>{fmt(v.total)}</div>
- <div style={{fontSize:9,color:v.estado==="Pagado"?"#00e676":"#ff3d57"}}>{v.estado}</div>
- </div>
+ <div style={{color:"#00e676",fontFamily:"Orbitron,monospace",fontSize:9,letterSpacing:1.5,marginBottom:8}}>▲ VENTAS ({res.ventas.length})</div>
+ {res.ventas.length===0&&<div style={{color:"#333",fontSize:11}}>Sin ventas</div>}
+ {res.ventas.slice(0,5).map(v=>(
+ <div key={v.id} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #ffffff06",fontSize:11}}>
+ <span style={{color:"#aaa"}}>{v.cliente_nombre}</span>
+ <span style={{color:"#00e676",fontWeight:700}}>{fmt(v.total)}</span>
  </div>
  ))}
+ {res.ventas.length>5&&<div style={{color:"#333",fontSize:10,marginTop:4}}>+{res.ventas.length-5} más...</div>}
  </div>
  <div style={{background:"#0a0a0a",border:"1px solid #ff6b3520",borderRadius:6,padding:12}}>
- <div style={{color:"#ff6b35",fontFamily:"Orbitron,monospace",fontSize:9,letterSpacing:1.5,marginBottom:10}}>▼ COMPRAS ({res.compras.length})</div>
- {res.compras.length===0 && <div style={{color:"#333",fontSize:11,padding:"8px 0"}}>Sin compras en este período</div>}
- {res.compras.map(c=>(
- <div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #ffffff06",fontSize:11}}>
- <div>
- <div style={{color:"#ccc",fontWeight:700}}>{c.proveedor}</div>
- <div style={{color:"#333",fontSize:10}}>{c.codigo} · {c.fecha}</div>
- </div>
- <div style={{color:"#ff6b35",fontWeight:900}}>{fmt(c.total)}</div>
+ <div style={{color:"#ff6b35",fontFamily:"Orbitron,monospace",fontSize:9,letterSpacing:1.5,marginBottom:8}}>▼ COMPRAS ({res.compras.length})</div>
+ {res.compras.length===0&&<div style={{color:"#333",fontSize:11}}>Sin compras</div>}
+ {res.compras.slice(0,5).map(c=>(
+ <div key={c.id} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #ffffff06",fontSize:11}}>
+ <span style={{color:"#aaa"}}>{c.proveedor}</span>
+ <span style={{color:"#ff6b35",fontWeight:700}}>{fmt(c.total)}</span>
  </div>
  ))}
+ {res.compras.length>5&&<div style={{color:"#333",fontSize:10,marginTop:4}}>+{res.compras.length-5} más...</div>}
  </div>
  </div>
- {/* Margen por producto */}
- <div style={{background:"#0a0a0a",border:"1px solid #00d4ff20",borderRadius:6,padding:12,marginBottom:16}}>
- <div style={{fontFamily:"Orbitron,monospace",fontSize:9,color:"#00d4ff",letterSpacing:2,marginBottom:10}}>◈ MARGEN POR PRODUCTO — TOP 8</div>
- {res.topProds.map((p,i)=>{
- const color=p.mp>=60?"#00e676":p.mp>=30?"#ffd600":"#ff3d57";
- return (
- <div key={p.id} style={{marginBottom:10}}>
- <div style={{display:"flex",justifyContent:"space-between",marginBottom:4,fontSize:12}}>
- <span style={{color:"#aaa"}}>{i+1}. {p.nombre} <span style={{color:"#444",fontSize:10}}>({p.categoria})</span></span>
- <div style={{display:"flex",gap:16,fontSize:11}}>
- <span style={{color:"#555"}}>Costo: <strong style={{color:"#ff6b35"}}>{fmt(p.precio_compra)}</strong></span>
- <span style={{color:"#555"}}>Venta: <strong style={{color:"#00e676"}}>{fmt(p.precio_venta)}</strong></span>
- <span style={{color:"#555"}}>Ganancia: <strong style={{color:"#00e676"}}>{fmt(p.precio_venta-p.precio_compra)}</strong></span>
- <span style={{fontWeight:900,color,fontSize:13}}>{p.mp.toFixed(1)}%</span>
- </div>
- </div>
- <div style={{background:"#111",borderRadius:2,height:4}}>
- <div style={{width:`${Math.min(100,p.mp)}%`,height:4,borderRadius:2,background:color,transition:"width .5s"}} />
- </div>
- </div>
- );
- })}
- </div>
- {/* Deudas pendientes */}
- {res.deudas.length>0 && (
- <div style={{background:"#ff3d5710",border:"1px solid #ff3d5730",borderRadius:6,padding:12,marginBottom:16}}>
- <div style={{color:"#ff3d57",fontFamily:"Orbitron,monospace",fontSize:9,letterSpacing:1.5,marginBottom:10}}>◆ DEUDAS PENDIENTES EN EL PERÍODO ({res.deudas.length}) — Total: {fmt(res.totalD)}</div>
- {res.deudas.map(d=>(
- <div key={d.id} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #ffffff06",fontSize:11}}>
- <div>
- <span style={{color:"#ccc",fontWeight:700}}>{d.cliente_nombre}</span>
- <span style={{color:"#444",marginLeft:8,fontSize:10}}>{d.descripcion}</span>
- </div>
- <div style={{display:"flex",gap:16,fontSize:11}}>
- <span style={{color:"#555"}}>Total: <strong style={{color:"#ff3d57"}}>{fmt(d.monto)}</strong></span>
- <span style={{color:"#555"}}>Pagado: <strong style={{color:"#00e676"}}>{fmt(d.monto_pagado)}</strong></span>
- <span style={{color:"#555"}}>Pendiente: <strong style={{color:"#ffd600"}}>{fmt(d.monto-d.monto_pagado)}</strong></span>
- </div>
+ {/* Deudas */}
+ {res.deudas.length>0&&(
+ <div style={{background:"#ff3d5710",border:"1px solid #ff3d5730",borderRadius:6,padding:12}}>
+ <div style={{color:"#ff3d57",fontFamily:"Orbitron,monospace",fontSize:9,letterSpacing:1.5,marginBottom:8}}>◆ DEUDAS ({res.deudas.length}) — {fmt(res.totalD)}</div>
+ {res.deudas.slice(0,4).map(d=>(
+ <div key={d.id} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #ffffff06",fontSize:11}}>
+ <span style={{color:"#aaa"}}>{d.cliente_nombre}</span>
+ <span style={{color:"#ffd600",fontWeight:700}}>{fmt(d.monto-d.monto_pagado)}</span>
  </div>
  ))}
  </div>
  )}
- {/* Resumen final */}
- <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
- {[
- {label:"Total transacciones ventas", val:res.ventas.length},
- {label:"Total transacciones compras", val:res.compras.length},
- {label:"Ventas pendientes de cobro", val:fmt(res.ventas.filter(v=>v.estado==="Pendiente").reduce((s,v)=>s+v.total,0))},
- {label:"Deudas por cobrar", val:fmt(res.totalD)},
- {label:"Productos en inventario", val:data.productos.length},
- {label:"Clientes registrados", val:data.clientes.length},
- ].map(item=>(
- <div key={item.label} style={{display:"flex",justifyContent:"space-between",padding:"8px 12px",background:"#0a0a0a",borderRadius:4,fontSize:12}}>
- <span style={{color:"#444"}}>{item.label}</span>
- <span style={{color:"#e0e0e0",fontWeight:700}}>{item.val}</span>
- </div>
- ))}
- </div>
- {/* Footer */}
- <div style={{marginTop:18,paddingTop:12,borderTop:"1px solid #ffffff08",display:"flex",justifyContent:"space-between",fontSize:10,color:"#333"}}>
- <span>NexuStoreRD — Accesorios de PC | Santo Domingo, Rep. Dominicana</span>
- <span>Período: {rango.desde} al {rango.hasta}</span>
- </div>
- </div>{/* fin printRef */}
- {/* Botón imprimir al pie */}
- <button onClick={generarPDF} className="btn-glow"
- style={{width:"100%",marginTop:16,background:"#a78bfa20",color:"#a78bfa",border:"1px solid #a78bfa60",borderRadius:4,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,letterSpacing:1.5,padding:"13px 0"}}>
- DESCARGAR PDF
+ {/* Botón PDF al fondo de la vista */}
+ <button onClick={abrirPDF} className="btn-glow"
+ style={{width:"100%",background:"#a78bfa20",color:"#a78bfa",border:"1px solid #a78bfa",padding:"12px 0",borderRadius:4,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,letterSpacing:1.5,boxShadow:"0 0 15px #a78bfa30"}}>
+ GENERAR PDF DE ESTE REPORTE
  </button>
  </div>
  )}
