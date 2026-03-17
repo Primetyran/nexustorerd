@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 // ═══════════════════════════════════════════════════════════
-// NEXUSTORERD v6.2 — Sistema de Gestión | by Jeffrey Vargas
-// NOVEDADES v6.2: Modales compactos, buscador cliente en deudas, indicador estado reubicado
+// NEXUSTORERD v6.3 — Sistema de Gestión | by Jeffrey Vargas
+// NOVEDADES v6.3: Header fijo móvil, modal fullscreen scroll aislado, body lock al abrir modal
 // ═══════════════════════════════════════════════════════════
 
 const DEMO_DATA = {
@@ -35,7 +35,7 @@ const DEMO_DATA = {
 };
 
 const CATEGORIAS_DEFAULT = ["Mouse","Teclado","Audio","Monitor","Almacenamiento","Accesorios","Cámara","Otro"];
-const STORAGE_KEY = "nexustorerd-v62";
+const STORAGE_KEY = "nexustorerd-v63";
 const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
 export default function NexuStoreRD() {
@@ -790,63 +790,113 @@ export default function NexuStoreRD() {
         .content-pad{padding:24px 28px;}
         .grid-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
         .grid-chart{display:grid;grid-template-columns:1.5fr 1fr;gap:16px;}
+        .mobile-header{display:none;}
 
         @media(max-width:768px){
-          /* Layout */
+          /* ── Layout principal fijo ── */
           .sidebar-desktop{display:none!important;}
-          .bottomnav{display:flex!important;position:fixed;bottom:0;left:0;right:0;background:#050505;border-top:1px solid #00d4ff20;z-index:100;padding-bottom:env(safe-area-inset-bottom);}
+          .hide-mobile{display:none!important;}
+          .show-mobile{display:flex!important;}
+          .grid-stats{grid-template-columns:repeat(2,1fr)!important;gap:8px!important;}
+          .grid-chart{grid-template-columns:1fr!important;}
+          .grid2-form{grid-template-columns:1fr!important;}
+
+          /* Header fijo arriba — nunca se mueve */
+          .main-header{
+            position:fixed!important;
+            top:0; left:0; right:0;
+            z-index:90;
+            background:#050505!important;
+          }
+
+          /* Contenido empieza debajo del header fijo */
+          .content-pad{
+            padding:10px 12px 90px!important;
+            padding-top:80px!important;
+            overflow-y:auto;
+            -webkit-overflow-scrolling:touch;
+            height:100vh;
+            position:fixed;
+            top:0; left:0; right:0; bottom:0;
+          }
+
+          /* Menú inferior fijo */
+          .bottomnav{
+            display:flex!important;
+            position:fixed;
+            bottom:0; left:0; right:0;
+            background:#050505;
+            border-top:1px solid #00d4ff20;
+            z-index:100;
+            padding-bottom:env(safe-area-inset-bottom);
+          }
           .bottomnav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 2px 8px;cursor:pointer;gap:3px;border:none;background:transparent;font-family:inherit;}
           .bottomnav-icon{font-size:18px;}
           .bottomnav-label{font-size:7px;letter-spacing:.3px;font-weight:700;text-transform:uppercase;}
-          .content-pad{padding:12px 12px 90px!important;}
-          .hide-mobile{display:none!important;}
-          .show-mobile{display:flex!important;}
 
-          /* Stats grid 2x2 */
-          .grid-stats{grid-template-columns:repeat(2,1fr)!important;gap:8px!important;}
-          .grid-chart{grid-template-columns:1fr!important;}
+          /* ── Modal FULL SCREEN en móvil ── */
+          /* El overlay cubre toda la pantalla */
+          .modal-overlay{
+            position:fixed!important;
+            inset:0!important;
+            z-index:200!important;
+            display:flex!important;
+            align-items:flex-end!important;
+            justify-content:center!important;
+            background:rgba(0,0,0,.85)!important;
+            backdrop-filter:blur(4px);
+          }
+          /* El panel del modal ocupa casi toda la pantalla */
+          .modal-inner{
+            width:100%!important;
+            max-width:100%!important;
+            height:92vh!important;
+            max-height:92vh!important;
+            border-radius:16px 16px 0 0!important;
+            display:flex!important;
+            flex-direction:column!important;
+            overflow:hidden!important;
+          }
+          /* El body del modal hace scroll — NO la pantalla principal */
+          .modal-body{
+            flex:1!important;
+            overflow-y:auto!important;
+            -webkit-overflow-scrolling:touch!important;
+            overscroll-behavior:contain!important;
+          }
+          /* Impedir scroll del fondo cuando modal está abierto */
+          body.modal-open{
+            overflow:hidden!important;
+            position:fixed!important;
+            width:100%!important;
+          }
 
-          /* Header compacto */
-          h1{font-size:13px!important;}
-
-          /* Modales full screen en móvil */
-          .modal-inner{width:100%!important;max-width:100%!important;margin:0!important;border-radius:12px 12px 0 0!important;position:fixed!important;bottom:0!important;max-height:92vh!important;}
-          .grid2-form{grid-template-columns:1fr!important;}
-
-          /* ── TRANSFORMAR TABLAS EN TARJETAS ── */
+          /* ── Tablas → Tarjetas ── */
           .table-scroll > table{display:block;}
           .table-scroll > table thead{display:none;}
-          .table-scroll > table tbody{display:flex;flex-direction:column;gap:10px;padding:8px;}
+          .table-scroll > table tbody{display:flex;flex-direction:column;gap:10px;padding:4px 0;}
           .table-scroll > table tbody tr{
-            display:flex;flex-direction:column;gap:0;
+            display:flex;flex-direction:column;
             background:#0a0a0a;border:1px solid #ffffff0f;
             border-radius:8px;overflow:hidden;
-            padding:0;
           }
           .table-scroll > table tbody tr td{
             display:flex;justify-content:space-between;align-items:center;
             padding:9px 14px;border-bottom:1px solid #ffffff06;
-            font-size:12px;border-radius:0;
+            font-size:13px;border-radius:0;
           }
           .table-scroll > table tbody tr td:last-child{border-bottom:none;}
-          /* Ocultar columnas poco importantes en móvil */
           .table-scroll > table tbody tr td:nth-child(4),
           .table-scroll > table tbody tr td:nth-child(5){display:none;}
-          /* Botones de acción — fila completa grande */
           .table-scroll > table tbody tr td:last-child{
-            padding:10px 14px;gap:8px;justify-content:flex-end;
+            padding:10px 12px;gap:8px;justify-content:flex-end;
             background:#ffffff04;
           }
           .table-scroll > table tbody tr td:last-child button{
-            padding:10px 16px!important;font-size:12px!important;flex:1;text-align:center;
+            padding:11px 18px!important;font-size:13px!important;flex:1;text-align:center;
           }
-          /* Primera celda — nombre destacado */
-          .table-scroll > table tbody tr td:first-child{
-            font-size:11px;color:#555!important;font-weight:700;padding:6px 14px 4px;
-          }
-          .table-scroll > table tbody tr td:nth-child(2){
-            font-size:14px;font-weight:700;padding:2px 14px 8px;border-bottom:1px solid #ffffff08;
-          }
+          .table-scroll > table tbody tr td:first-child{font-size:11px;color:#555!important;padding:6px 14px 2px;}
+          .table-scroll > table tbody tr td:nth-child(2){font-size:14px;font-weight:700;padding:2px 14px 8px;border-bottom:1px solid #ffffff08;}
         }
       `}</style>
 
@@ -882,7 +932,7 @@ export default function NexuStoreRD() {
             NEXU<span style={{ color:"#ff6b35" }}>STORE</span>
           </div>
           <div style={{ color:"#ff6b35", fontSize:11, letterSpacing:4, marginTop:4, fontWeight:700 }}>RD</div>
-          <div style={{ fontSize:10, color:"#333", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v6.2</div>
+          <div style={{ fontSize:10, color:"#333", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v6.3</div>
         </div>
         <div style={{ padding:"0 12px", flex:1 }}>
           {NAV.map(item => (
@@ -905,8 +955,8 @@ export default function NexuStoreRD() {
 
       {/* ═══ MAIN ══════════════════════════════════════════════════════════ */}
       <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", position:"relative", zIndex:5 }}>
-        {/* Header */}
-        <div style={{ background:"#050505", borderBottom:"1px solid #00d4ff15", padding:"16px 28px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+        {/* Header — fijo en móvil */}
+        <div className="main-header" style={{ background:"#050505", borderBottom:"1px solid #00d4ff15", padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
           <div>
             <h1 className="neon-text" style={{ fontFamily:"Orbitron,monospace", fontSize:18, fontWeight:900, color:"#00d4ff", letterSpacing:3, textTransform:"uppercase" }}>
               {NAV.find(n=>n.id===view)?.icon} {NAV.find(n=>n.id===view)?.label}
@@ -2345,21 +2395,25 @@ function SearchBar({ value, onChange, placeholder }) {
   );
 }
 function Modal({ title, color, onClose, onSave, saveLabel, children }) {
+  React.useEffect(() => {
+    document.body.classList.add("modal-open");
+    return () => document.body.classList.remove("modal-open");
+  }, []);
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.92)", zIndex:100, display:"flex", alignItems:"flex-end", justifyContent:"center", backdropFilter:"blur(8px)" }}
+    <div className="modal-overlay" style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.92)", zIndex:200, display:"flex", alignItems:"flex-end", justifyContent:"center", backdropFilter:"blur(8px)" }}
       onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div className="fade-in modal-inner" style={{ background:"#080808", border:`1px solid ${color}30`, borderRadius:"12px 12px 0 0", width:"100%", maxWidth:640, maxHeight:"88vh", overflowY:"auto", boxShadow:`0 0 60px ${color}20`, display:"flex", flexDirection:"column" }}>
-        {/* Header fijo */}
+      <div className="fade-in modal-inner" style={{ background:"#080808", border:`1px solid ${color}30`, borderRadius:"12px 12px 0 0", width:"100%", maxWidth:640, maxHeight:"88vh", boxShadow:`0 0 60px ${color}20`, display:"flex", flexDirection:"column", overflow:"hidden" }}>
+        {/* Header — siempre visible arriba */}
         <div style={{ padding:"14px 18px", borderBottom:`1px solid ${color}20`, background:"#080808", flexShrink:0, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <h2 style={{ fontFamily:"Orbitron,monospace", fontSize:13, fontWeight:900, color, letterSpacing:1.5, margin:0 }}>{title}</h2>
-          <button onClick={onClose} style={{ background:"transparent", border:"none", color:"#555", fontSize:20, cursor:"pointer", lineHeight:1, padding:"0 4px" }}>✕</button>
+          <button onClick={onClose} style={{ background:"transparent", border:"none", color:"#555", fontSize:22, cursor:"pointer", lineHeight:1, padding:"0 6px" }}>✕</button>
         </div>
-        {/* Contenido con scroll */}
-        <div style={{ padding:"14px 18px", display:"flex", flexDirection:"column", gap:12, overflowY:"auto", flex:1 }}>{children}</div>
-        {/* Botones fijos abajo */}
+        {/* Contenido — SOLO este div hace scroll */}
+        <div className="modal-body" style={{ padding:"14px 18px", display:"flex", flexDirection:"column", gap:12, overflowY:"auto", flex:1, WebkitOverflowScrolling:"touch", overscrollBehavior:"contain" }}>{children}</div>
+        {/* Botones — siempre visibles abajo */}
         <div style={{ padding:"12px 18px", borderTop:`1px solid ${color}15`, display:"flex", gap:8, background:"#080808", flexShrink:0 }}>
-          <button className="btn-glow" onClick={onClose} style={{ flex:1, background:"transparent", color:"#444", border:"1px solid #222", padding:"12px", borderRadius:6, cursor:"pointer", fontFamily:"inherit", fontSize:13, letterSpacing:1 }}>CANCELAR</button>
-          <button className="btn-glow" onClick={onSave} style={{ flex:2, background:`${color}20`, color, border:`1px solid ${color}`, padding:"12px", borderRadius:6, cursor:"pointer", fontFamily:"inherit", fontSize:13, fontWeight:700, letterSpacing:1, boxShadow:`0 0 15px ${color}30` }}>✓ {saveLabel}</button>
+          <button className="btn-glow" onClick={onClose} style={{ flex:1, background:"transparent", color:"#444", border:"1px solid #222", padding:"13px", borderRadius:6, cursor:"pointer", fontFamily:"inherit", fontSize:13, letterSpacing:1 }}>CANCELAR</button>
+          <button className="btn-glow" onClick={onSave} style={{ flex:2, background:`${color}20`, color, border:`1px solid ${color}`, padding:"13px", borderRadius:6, cursor:"pointer", fontFamily:"inherit", fontSize:13, fontWeight:700, letterSpacing:1, boxShadow:`0 0 15px ${color}30` }}>✓ {saveLabel}</button>
         </div>
       </div>
     </div>
