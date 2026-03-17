@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 // ═══════════════════════════════════════════════════════════
-// NEXUSTORERD v5.5 — Sistema de Gestión | by Jeffrey Vargas
-// NOVEDADES v5.5: Reporte 100% interno en React, sin window.open, imprimir con CSS @media print
+// NEXUSTORERD v5.6 — Sistema de Gestión | by Jeffrey Vargas
+// NOVEDADES v5.6: Reporte visualizable dentro del modal sin ninguna función de impresión
 // ═══════════════════════════════════════════════════════════
 const DEMO_DATA = {
  productos: [
@@ -33,7 +33,7 @@ const DEMO_DATA = {
  cotizaciones: [],
 };
 const CATEGORIAS_DEFAULT = ["Mouse","Teclado","Audio","Monitor","Almacenamiento","Accesorios","Cámara","Otro"];
-const STORAGE_KEY = "nexustorerd-v55";
+const STORAGE_KEY = "nexustorerd-v56";
 const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 export default function NexuStoreRD() {
  const [data, setData] = useState(null);
@@ -740,11 +740,6 @@ export default function NexuStoreRD() {
  .slide-in{animation:slideIn .3s ease-out;}
  .scanline{position:absolute;width:100%;height:2px;background:linear-gradient(transparent,#00d4ff08,transparent);animation:scanline 8s linear infinite;pointer-events:none;z-index:1;}
  .border-glow{animation:borderGlow 3s ease-in-out infinite;}
- @media print {
- body * { visibility: hidden !important; }
- #reporte-print, #reporte-print * { visibility: visible !important; }
- #reporte-print { position: fixed !important; inset: 0 !important; background: #fff !important; color: #222 !important; padding: 28px !important; font-family: Arial, sans-serif !important; font-size: 12px !important; z-index: 99999 !important; overflow: visible !important; }
- }
  `}</style>
  <canvas ref={canvasRef} style={{ position:"fixed", top:0, left:0, width:"100%", height:"100%", opacity:.03, pointerEvents:"none", zIndex:0 }} />
  <div className="scanline" />
@@ -775,7 +770,7 @@ export default function NexuStoreRD() {
  NEXU<span style={{ color:"#ff6b35" }}>STORE</span>
  </div>
  <div style={{ color:"#ff6b35", fontSize:11, letterSpacing:4, marginTop:4, fontWeight:700 }}>RD</div>
- <div style={{ fontSize:10, color:"#333", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v5.5</div>
+ <div style={{ fontSize:10, color:"#333", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v5.6</div>
  </div>
  <div style={{ padding:"0 12px", flex:1 }}>
  {NAV.map(item => (
@@ -2167,7 +2162,6 @@ function ReporteModal({ data, fmt, MESES, rango, setRango, onClose }) {
  };
  const res = filtrar();
  const rangoValido = rango.desde && rango.hasta && new Date(rango.desde)<=new Date(rango.hasta);
- const imprimir = () => window.print();
  return (
  <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.92)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(8px)"}}
  onClick={e=>e.target===e.currentTarget&&onClose()}>
@@ -2207,17 +2201,11 @@ function ReporteModal({ data, fmt, MESES, rango, setRango, onClose }) {
  style={{flex:1,background:"#00d4ff20",color:"#00d4ff",border:"1px solid #00d4ff60",borderRadius:4,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,letterSpacing:1.5,padding:"11px 0",textTransform:"uppercase"}}>
  VER REPORTE
  </button>
- {vista && res && (
- <button onClick={imprimir} className="btn-glow"
- style={{flex:1,background:"#a78bfa20",color:"#a78bfa",border:"1px solid #a78bfa60",borderRadius:4,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,letterSpacing:1.5,padding:"11px 0",textTransform:"uppercase"}}>
- IMPRIMIR / PDF
- </button>
- )}
  </div>
  )}
  {/* ── REPORTE COMPLETO — este div se imprime ── */}
  {vista && res && (
- <div id="reporte-print" className="fade-in" style={{display:"flex",flexDirection:"column",gap:14,background:"#080808"}}>
+ <div className="fade-in" style={{display:"flex",flexDirection:"column",gap:14,background:"#080808"}}>
  <div style={{height:1,background:"linear-gradient(to right,transparent,#a78bfa40,transparent)"}} />
  {/* Encabezado del reporte */}
  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingBottom:12,borderBottom:"1px solid #a78bfa30"}}>
