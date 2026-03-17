@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 // ═══════════════════════════════════════════════════════════
-// NEXUSTORERD v6.5 — Sistema de Gestión | by Jeffrey Vargas
-// NOVEDADES v6.5: Header fijo, modal centrado con scroll interno, buscadores en ventas/compras/deudas
+// NEXUSTORERD v6.6 — Sistema de Gestión | by Jeffrey Vargas
+// NOVEDADES v6.6: Móvil — buscador+header fijo por sección, scroll solo en registros, stock visible en inventario
 // ═══════════════════════════════════════════════════════════
 
 const DEMO_DATA = {
@@ -35,7 +35,7 @@ const DEMO_DATA = {
 };
 
 const CATEGORIAS_DEFAULT = ["Mouse","Teclado","Audio","Monitor","Almacenamiento","Accesorios","Cámara","Otro"];
-const STORAGE_KEY = "nexustorerd-v65";
+const STORAGE_KEY = "nexustorerd-v66";
 const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
 export default function NexuStoreRD() {
@@ -784,6 +784,8 @@ export default function NexuStoreRD() {
 
         /* ── BASE ── */
         .sidebar-desktop{display:flex;}
+        .section-header{/* desktop: normal */}
+        .section-scroll{/* desktop: normal */}
         .bottomnav{display:none;}
         .hide-mobile{display:block;}
         .show-mobile{display:none;}
@@ -813,10 +815,35 @@ export default function NexuStoreRD() {
           .table-scroll>table tbody tr{display:flex;flex-direction:column;background:#0a0a0a;border:1px solid #ffffff0f;border-radius:8px;overflow:hidden;}
           .table-scroll>table tbody tr td{display:flex;justify-content:space-between;align-items:center;padding:9px 14px;border-bottom:1px solid #ffffff06;font-size:13px;}
           .table-scroll>table tbody tr td:last-child{border-bottom:none;padding:10px 12px;gap:8px;justify-content:flex-end;background:#ffffff04;}
-          .table-scroll>table tbody tr td:nth-child(4),.table-scroll>table tbody tr td:nth-child(5){display:none;}
+          /* Inventario móvil: ocultar categoría(3), precio compra(5), margen(7) — mostrar stock(4) y precio venta(6) */
+          .table-scroll>table tbody tr td:nth-child(3){display:none;}
+          .table-scroll>table tbody tr td:nth-child(5){display:none;}
+          .table-scroll>table tbody tr td:nth-child(7){display:none;}
           .table-scroll>table tbody tr td:last-child button{padding:12px 14px!important;font-size:13px!important;flex:1;text-align:center;}
           .table-scroll>table tbody tr td:first-child{font-size:11px;color:#555!important;padding:6px 14px 2px;}
           .table-scroll>table tbody tr td:nth-child(2){font-size:14px;font-weight:700;padding:2px 14px 8px;border-bottom:1px solid #ffffff08;}
+
+          /* Header de sección y buscador fijos — scroll solo en registros */
+          .section-header{
+            position:sticky;
+            top:0;
+            z-index:50;
+            background:#000;
+            padding-bottom:10px;
+            flex-shrink:0;
+          }
+          .section-scroll{
+            flex:1;
+            overflow-y:auto;
+            -webkit-overflow-scrolling:touch;
+            min-height:0;
+          }
+          .content-pad{
+            display:flex!important;
+            flex-direction:column!important;
+            overflow:hidden!important;
+            padding-bottom:80px!important;
+          }
         }
             `}</style>
 
@@ -852,7 +879,7 @@ export default function NexuStoreRD() {
             NEXU<span style={{ color:"#ff6b35" }}>STORE</span>
           </div>
           <div style={{ color:"#ff6b35", fontSize:11, letterSpacing:4, marginTop:4, fontWeight:700 }}>RD</div>
-          <div style={{ fontSize:10, color:"#333", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v6.5</div>
+          <div style={{ fontSize:10, color:"#333", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v6.6</div>
         </div>
         <div style={{ padding:"0 12px", flex:1 }}>
           {NAV.map(item => (
@@ -896,7 +923,7 @@ export default function NexuStoreRD() {
         </div>
 
         {/* Content */}
-        <div className="content-pad" style={{ flex:1, overflowY:"auto", padding:"24px 28px" }}>
+        <div className="content-pad" style={{ flex:1, overflowY:"auto", padding:"24px 28px", display:"flex", flexDirection:"column" }}>
 
           {/* ── DASHBOARD ─────────────────────────────────────────────── */}
           {view==="dashboard" && (
@@ -1054,7 +1081,8 @@ export default function NexuStoreRD() {
 
           {/* ── INVENTARIO ────────────────────────────────────────────── */}
           {view==="inventario" && (
-            <div className="fade-in">
+            <div className="fade-in" style={{ display:"flex", flexDirection:"column", flex:1, minHeight:0 }}>
+              <div className="section-header">
               {/* Barra doble: buscador producto + buscador/selector categoría */}
               <div style={{ display:"flex", gap:10, marginBottom:16, alignItems:"stretch" }}>
                 {/* Buscador producto */}
@@ -1090,6 +1118,8 @@ export default function NexuStoreRD() {
                   )}
                 </div>
               </div>
+              </div>{/* end section-header */}
+              <div className="section-scroll">
               <Table headers={["CÓDIGO","PRODUCTO","CATEGORÍA","STOCK","P.COMPRA","P.VENTA","MARGEN","ACCIONES"]}>
                 {filteredProds.map(p => {
                   const m = p.precio_compra>0 ? (((p.precio_venta-p.precio_compra)/p.precio_compra)*100).toFixed(0) : "N/A";
@@ -1114,13 +1144,17 @@ export default function NexuStoreRD() {
                   );
                 })}
               </Table>
+              </div>{/* end section-scroll */}
             </div>
           )}
 
           {/* ── CLIENTES ──────────────────────────────────────────────── */}
           {view==="clientes" && (
-            <div className="fade-in">
+            <div className="fade-in" style={{ display:"flex", flexDirection:"column", flex:1, minHeight:0 }}>
+              <div className="section-header">
               <SearchBar value={search} onChange={setSearch} placeholder="Buscar cliente o cédula..." />
+              </div>
+              <div className="section-scroll">
               <Table headers={["#","NOMBRE","CÉDULA","TELÉFONO","CORREO","CIUDAD","ACCIONES"]}>
                 {filteredClients.map(c => (
                   <tr key={c.id} className="row-hover">
@@ -1138,13 +1172,17 @@ export default function NexuStoreRD() {
                   </tr>
                 ))}
               </Table>
+              </div>{/* end section-scroll */}
             </div>
           )}
 
           {/* ── VENTAS ────────────────────────────────────────────────── */}
           {view==="ventas" && (
-            <div className="fade-in">
+            <div className="fade-in" style={{ display:"flex", flexDirection:"column", flex:1, minHeight:0 }}>
+              <div className="section-header">
               <SearchBar value={search} onChange={setSearch} placeholder="Buscar por cliente o código..." color="#00e676" />
+              </div>
+              <div className="section-scroll">
               <Table headers={["CÓDIGO","CLIENTE","FECHA","PRODUCTOS","DESCUENTO","TOTAL","ESTADO","ACCIONES"]}>
                 {[...data.ventas].reverse().filter(v=>!search||v.cliente_nombre.toLowerCase().includes(search.toLowerCase())||v.codigo.toLowerCase().includes(search.toLowerCase())).map(v => {
                   const prodConImg = v.items?.some(i => data.productos.find(p=>p.id===i.producto_id&&p.imagen));
@@ -1169,13 +1207,17 @@ export default function NexuStoreRD() {
                   );
                 })}
               </Table>
+              </div>{/* end section-scroll */}
             </div>
           )}
 
           {/* ── COMPRAS ───────────────────────────────────────────────── */}
           {view==="compras" && (
-            <div className="fade-in">
+            <div className="fade-in" style={{ display:"flex", flexDirection:"column", flex:1, minHeight:0 }}>
+              <div className="section-header">
               <SearchBar value={search} onChange={setSearch} placeholder="Buscar por proveedor o código..." color="#ff6b35" />
+              </div>
+              <div className="section-scroll">
               <Table headers={["CÓDIGO","PROVEEDOR","FECHA","PRODUCTOS","CANT.","COSTO","COURIER","TOTAL","GANANCIA EST.","ACCIONES"]}>
                 {data.compras.length===0 && !search && <tr><td colSpan={10} style={{padding:40,textAlign:"center",color:"#333",fontSize:13}}>SIN COMPRAS REGISTRADAS</td></tr>}
                 {[...data.compras].reverse().filter(c=>!search||c.proveedor.toLowerCase().includes(search.toLowerCase())||c.codigo.toLowerCase().includes(search.toLowerCase())).map(c => {
@@ -1202,6 +1244,7 @@ export default function NexuStoreRD() {
                   );
                 })}
               </Table>
+              </div>{/* end section-scroll */}
               {/* Resumen totales */}
               {data.compras.length>0 && (() => {
                 const totCosto = data.compras.reduce((s,c)=>s+(c.subtotalProductos||c.total||0),0);
@@ -1229,8 +1272,11 @@ export default function NexuStoreRD() {
 
           {/* ── DEUDAS — con columna PENDIENTE y botón ABONO ──────────── */}
           {view==="deudas" && (
-            <div className="fade-in">
+            <div className="fade-in" style={{ display:"flex", flexDirection:"column", flex:1, minHeight:0 }}>
+              <div className="section-header">
               <SearchBar value={search} onChange={setSearch} placeholder="Buscar por cliente o descripción..." color="#ff3d57" />
+              </div>
+              <div className="section-scroll">
               <Table headers={["#","CLIENTE","DESCRIPCIÓN","MONTO","PAGADO","PENDIENTE","VENCE","ESTADO","ACCIONES"]}>
                 {data.deudas.length===0 && !search && <tr><td colSpan={9} style={{ padding:40, textAlign:"center", color:"#333", fontSize:13 }}>SIN DEUDAS REGISTRADAS</td></tr>}
                 {[...data.deudas].reverse().filter(d=>!search||d.cliente_nombre.toLowerCase().includes(search.toLowerCase())||d.descripcion.toLowerCase().includes(search.toLowerCase())).map(d => {
@@ -1262,6 +1308,7 @@ export default function NexuStoreRD() {
                   );
                 })}
               </Table>
+              </div>{/* end section-scroll */}
             </div>
           )}
 
