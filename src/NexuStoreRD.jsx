@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 // ═══════════════════════════════════════════════════════════
-// NEXUSTORERD v6.4 — Sistema de Gestión | by Jeffrey Vargas
-// NOVEDADES v6.4: Corregido modal móvil — scroll interno, botones siempre visibles, sin pantalla negra
+// NEXUSTORERD v6.5 — Sistema de Gestión | by Jeffrey Vargas
+// NOVEDADES v6.5: Header fijo, modal centrado con scroll interno, buscadores en ventas/compras/deudas
 // ═══════════════════════════════════════════════════════════
 
 const DEMO_DATA = {
@@ -35,7 +35,7 @@ const DEMO_DATA = {
 };
 
 const CATEGORIAS_DEFAULT = ["Mouse","Teclado","Audio","Monitor","Almacenamiento","Accesorios","Cámara","Otro"];
-const STORAGE_KEY = "nexustorerd-v64";
+const STORAGE_KEY = "nexustorerd-v65";
 const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
 export default function NexuStoreRD() {
@@ -782,7 +782,7 @@ export default function NexuStoreRD() {
         .scanline{position:absolute;width:100%;height:2px;background:linear-gradient(transparent,#00d4ff08,transparent);animation:scanline 8s linear infinite;pointer-events:none;z-index:1;}
         .border-glow{animation:borderGlow 3s ease-in-out infinite;}
 
-        /* ── RESPONSIVE MÓVIL ── */
+        /* ── BASE ── */
         .sidebar-desktop{display:flex;}
         .bottomnav{display:none;}
         .hide-mobile{display:block;}
@@ -791,6 +791,7 @@ export default function NexuStoreRD() {
         .grid-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
         .grid-chart{display:grid;grid-template-columns:1.5fr 1fr;gap:16px;}
 
+        /* ── MÓVIL ── */
         @media(max-width:768px){
           .sidebar-desktop{display:none!important;}
           .hide-mobile{display:none!important;}
@@ -798,55 +799,26 @@ export default function NexuStoreRD() {
           .grid-stats{grid-template-columns:repeat(2,1fr)!important;gap:8px!important;}
           .grid-chart{grid-template-columns:1fr!important;}
           .grid2-form{grid-template-columns:1fr!important;}
-          .content-pad{padding:12px 12px 80px!important;}
-
-          /* Menú inferior */
-          .bottomnav{
-            display:flex!important;
-            position:fixed;
-            bottom:0; left:0; right:0;
-            background:#050505;
-            border-top:1px solid #00d4ff20;
-            z-index:100;
-            padding-bottom:env(safe-area-inset-bottom);
-          }
+          .bottomnav{display:flex!important;position:fixed;bottom:0;left:0;right:0;background:#050505;border-top:1px solid #00d4ff20;z-index:100;padding-bottom:env(safe-area-inset-bottom);}
           .bottomnav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 2px 8px;cursor:pointer;gap:3px;border:none;background:transparent;font-family:inherit;}
           .bottomnav-icon{font-size:18px;}
-          .bottomnav-label{font-size:7px;letter-spacing:.3px;font-weight:700;text-transform:uppercase;}
-
-          /* Modal: panel desde abajo, scroll interno */
-          .modal-inner{
-            position:fixed!important;
-            bottom:0; left:0; right:0;
-            width:100%!important;
-            max-width:100%!important;
-            height:90vh!important;
-            max-height:90vh!important;
-            border-radius:16px 16px 0 0!important;
-            display:flex!important;
-            flex-direction:column!important;
-            overflow:hidden!important;
-            z-index:200;
-          }
-          .modal-body{
-            flex:1!important;
-            overflow-y:scroll!important;
-            -webkit-overflow-scrolling:touch!important;
-          }
-
-          /* Tablas → Tarjetas */
-          .table-scroll > table{display:block;}
-          .table-scroll > table thead{display:none;}
-          .table-scroll > table tbody{display:flex;flex-direction:column;gap:10px;padding:4px 0;}
-          .table-scroll > table tbody tr{display:flex;flex-direction:column;background:#0a0a0a;border:1px solid #ffffff0f;border-radius:8px;overflow:hidden;}
-          .table-scroll > table tbody tr td{display:flex;justify-content:space-between;align-items:center;padding:9px 14px;border-bottom:1px solid #ffffff06;font-size:13px;}
-          .table-scroll > table tbody tr td:last-child{border-bottom:none;padding:10px 12px;gap:8px;justify-content:flex-end;background:#ffffff04;}
-          .table-scroll > table tbody tr td:nth-child(4),.table-scroll > table tbody tr td:nth-child(5){display:none;}
-          .table-scroll > table tbody tr td:last-child button{padding:12px 16px!important;font-size:13px!important;flex:1;text-align:center;}
-          .table-scroll > table tbody tr td:first-child{font-size:11px;color:#555!important;padding:6px 14px 2px;}
-          .table-scroll > table tbody tr td:nth-child(2){font-size:14px;font-weight:700;padding:2px 14px 8px;border-bottom:1px solid #ffffff08;}
+          .bottomnav-label{font-size:7px;font-weight:700;text-transform:uppercase;}
+          .main-header{position:sticky!important;top:0;z-index:80;background:#050505!important;}
+          .content-pad{padding:12px 12px 80px!important;overflow-y:auto;flex:1;}
+          .modal-inner{position:fixed!important;top:50%!important;left:50%!important;transform:translate(-50%,-50%)!important;width:94%!important;max-width:94%!important;height:auto!important;max-height:86vh!important;border-radius:12px!important;display:flex!important;flex-direction:column!important;overflow:hidden!important;}
+          .modal-body{flex:1!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;min-height:0!important;}
+          .table-scroll>table{display:block;}
+          .table-scroll>table thead{display:none;}
+          .table-scroll>table tbody{display:flex;flex-direction:column;gap:10px;padding:4px 0;}
+          .table-scroll>table tbody tr{display:flex;flex-direction:column;background:#0a0a0a;border:1px solid #ffffff0f;border-radius:8px;overflow:hidden;}
+          .table-scroll>table tbody tr td{display:flex;justify-content:space-between;align-items:center;padding:9px 14px;border-bottom:1px solid #ffffff06;font-size:13px;}
+          .table-scroll>table tbody tr td:last-child{border-bottom:none;padding:10px 12px;gap:8px;justify-content:flex-end;background:#ffffff04;}
+          .table-scroll>table tbody tr td:nth-child(4),.table-scroll>table tbody tr td:nth-child(5){display:none;}
+          .table-scroll>table tbody tr td:last-child button{padding:12px 14px!important;font-size:13px!important;flex:1;text-align:center;}
+          .table-scroll>table tbody tr td:first-child{font-size:11px;color:#555!important;padding:6px 14px 2px;}
+          .table-scroll>table tbody tr td:nth-child(2){font-size:14px;font-weight:700;padding:2px 14px 8px;border-bottom:1px solid #ffffff08;}
         }
-      `}</style>
+            `}</style>
 
       <canvas ref={canvasRef} style={{ position:"fixed", top:0, left:0, width:"100%", height:"100%", opacity:.03, pointerEvents:"none", zIndex:0 }} />
       <div className="scanline" />
@@ -880,7 +852,7 @@ export default function NexuStoreRD() {
             NEXU<span style={{ color:"#ff6b35" }}>STORE</span>
           </div>
           <div style={{ color:"#ff6b35", fontSize:11, letterSpacing:4, marginTop:4, fontWeight:700 }}>RD</div>
-          <div style={{ fontSize:10, color:"#333", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v6.4</div>
+          <div style={{ fontSize:10, color:"#333", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v6.5</div>
         </div>
         <div style={{ padding:"0 12px", flex:1 }}>
           {NAV.map(item => (
@@ -903,8 +875,8 @@ export default function NexuStoreRD() {
 
       {/* ═══ MAIN ══════════════════════════════════════════════════════════ */}
       <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", position:"relative", zIndex:5 }}>
-        {/* Header */}
-        <div style={{ background:"#050505", borderBottom:"1px solid #00d4ff15", padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
+        {/* Header fijo */}
+        <div className="main-header" style={{ background:"#050505", borderBottom:"1px solid #00d4ff15", padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
           <div>
             <h1 className="neon-text" style={{ fontFamily:"Orbitron,monospace", fontSize:18, fontWeight:900, color:"#00d4ff", letterSpacing:3, textTransform:"uppercase" }}>
               {NAV.find(n=>n.id===view)?.icon} {NAV.find(n=>n.id===view)?.label}
@@ -1172,8 +1144,9 @@ export default function NexuStoreRD() {
           {/* ── VENTAS ────────────────────────────────────────────────── */}
           {view==="ventas" && (
             <div className="fade-in">
+              <SearchBar value={search} onChange={setSearch} placeholder="Buscar por cliente o código..." color="#00e676" />
               <Table headers={["CÓDIGO","CLIENTE","FECHA","PRODUCTOS","DESCUENTO","TOTAL","ESTADO","ACCIONES"]}>
-                {[...data.ventas].reverse().map(v => {
+                {[...data.ventas].reverse().filter(v=>!search||v.cliente_nombre.toLowerCase().includes(search.toLowerCase())||v.codigo.toLowerCase().includes(search.toLowerCase())).map(v => {
                   const prodConImg = v.items?.some(i => data.productos.find(p=>p.id===i.producto_id&&p.imagen));
                   return (
                     <tr key={v.id} className="row-hover">
@@ -1202,9 +1175,10 @@ export default function NexuStoreRD() {
           {/* ── COMPRAS ───────────────────────────────────────────────── */}
           {view==="compras" && (
             <div className="fade-in">
+              <SearchBar value={search} onChange={setSearch} placeholder="Buscar por proveedor o código..." color="#ff6b35" />
               <Table headers={["CÓDIGO","PROVEEDOR","FECHA","PRODUCTOS","CANT.","COSTO","COURIER","TOTAL","GANANCIA EST.","ACCIONES"]}>
-                {data.compras.length===0 && <tr><td colSpan={10} style={{padding:40,textAlign:"center",color:"#333",fontSize:13}}>SIN COMPRAS REGISTRADAS</td></tr>}
-                {[...data.compras].reverse().map(c => {
+                {data.compras.length===0 && !search && <tr><td colSpan={10} style={{padding:40,textAlign:"center",color:"#333",fontSize:13}}>SIN COMPRAS REGISTRADAS</td></tr>}
+                {[...data.compras].reverse().filter(c=>!search||c.proveedor.toLowerCase().includes(search.toLowerCase())||c.codigo.toLowerCase().includes(search.toLowerCase())).map(c => {
                   const subtProd = c.items?.reduce((s,i)=>s+(i.cantidad*i.costo),0)||0;
                   const subtVenta = c.items?.reduce((s,i)=>s+(i.cantidad*(i.precio_venta||0)),0)||0;
                   const ganancia = subtVenta - subtProd;
@@ -1256,9 +1230,10 @@ export default function NexuStoreRD() {
           {/* ── DEUDAS — con columna PENDIENTE y botón ABONO ──────────── */}
           {view==="deudas" && (
             <div className="fade-in">
+              <SearchBar value={search} onChange={setSearch} placeholder="Buscar por cliente o descripción..." color="#ff3d57" />
               <Table headers={["#","CLIENTE","DESCRIPCIÓN","MONTO","PAGADO","PENDIENTE","VENCE","ESTADO","ACCIONES"]}>
-                {data.deudas.length===0 && <tr><td colSpan={9} style={{ padding:40, textAlign:"center", color:"#333", fontSize:13 }}>SIN DEUDAS REGISTRADAS</td></tr>}
-                {[...data.deudas].reverse().map(d => {
+                {data.deudas.length===0 && !search && <tr><td colSpan={9} style={{ padding:40, textAlign:"center", color:"#333", fontSize:13 }}>SIN DEUDAS REGISTRADAS</td></tr>}
+                {[...data.deudas].reverse().filter(d=>!search||d.cliente_nombre.toLowerCase().includes(search.toLowerCase())||d.descripcion.toLowerCase().includes(search.toLowerCase())).map(d => {
                   const pendiente = d.monto - d.monto_pagado;
                   return (
                     <tr key={d.id} className="row-hover">
@@ -2336,17 +2311,23 @@ function Table({ headers, children }) {
 function TD({ children, color }) {
   return <td style={{ padding:"12px 16px", fontSize:12, borderBottom:"1px solid #ffffff05", color:color||"#aaa" }}>{children}</td>;
 }
-function SearchBar({ value, onChange, placeholder }) {
+function SearchBar({ value, onChange, placeholder, color="#00d4ff" }) {
   return (
-    <input style={{ width:"100%", maxWidth:380, padding:"10px 16px", border:"1px solid #00d4ff20", borderRadius:4, fontSize:12, fontFamily:"inherit", background:"#080808", color:"#e0e0e0", outline:"none", marginBottom:16, letterSpacing:.5 }}
-      placeholder={`◈ ${placeholder}`} value={value} onChange={e=>onChange(e.target.value)} />
+    <div style={{ position:"relative", marginBottom:14 }}>
+      <input style={{ width:"100%", padding:"11px 36px 11px 16px", border:`1px solid ${color}20`, borderRadius:6, fontSize:13, fontFamily:"inherit", background:"#080808", color:"#e0e0e0", outline:"none", letterSpacing:.5 }}
+        placeholder={`🔍 ${placeholder}`} value={value} onChange={e=>onChange(e.target.value)} />
+      {value && (
+        <button onClick={()=>onChange("")}
+          style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", color:"#ff3d57", cursor:"pointer", fontSize:16, padding:2, lineHeight:1 }}>✕</button>
+      )}
+    </div>
   );
 }
 function Modal({ title, color, onClose, onSave, saveLabel, children }) {
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.92)", zIndex:200, display:"flex", alignItems:"flex-end", justifyContent:"center", backdropFilter:"blur(4px)" }}
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.88)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center", backdropFilter:"blur(4px)" }}
       onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div className="fade-in modal-inner" style={{ background:"#080808", border:`1px solid ${color}30`, borderRadius:"14px 14px 0 0", width:"100%", maxWidth:640, maxHeight:"88vh", boxShadow:`0 0 40px ${color}20`, display:"flex", flexDirection:"column", overflow:"hidden" }}>
+      <div className="fade-in modal-inner" style={{ background:"#080808", border:`1px solid ${color}30`, borderRadius:12, width:"100%", maxWidth:640, maxHeight:"88vh", boxShadow:`0 0 40px ${color}20`, display:"flex", flexDirection:"column", overflow:"hidden" }}>
         {/* Título fijo arriba */}
         <div style={{ padding:"14px 18px", borderBottom:`1px solid ${color}20`, background:"#080808", flexShrink:0, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <h2 style={{ fontFamily:"Orbitron,monospace", fontSize:13, fontWeight:900, color, letterSpacing:1.5, margin:0 }}>{title}</h2>
