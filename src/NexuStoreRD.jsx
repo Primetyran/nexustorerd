@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 // ═══════════════════════════════════════════════════════════
-// NEXUSTORERD v5.0 — Sistema de Gestión | by Jeffrey Vargas
-// NOVEDADES v5.0: Gráfico con datos reales del año actual, botón PDF reporte financiero completo
+// NEXUSTORERD v5.1 — Sistema de Gestión | by Jeffrey Vargas
+// NOVEDADES v5.1: Modal de reporte con rango de fechas, vista previa y PDF por período
 // ═══════════════════════════════════════════════════════════
 const DEMO_DATA = {
  productos: [
@@ -33,7 +33,7 @@ const DEMO_DATA = {
  cotizaciones: [],
 };
 const CATEGORIAS_DEFAULT = ["Mouse","Teclado","Audio","Monitor","Almacenamiento","Accesorios","Cámara","Otro"];
-const STORAGE_KEY = "nexustorerd-v50";
+const STORAGE_KEY = "nexustorerd-v51";
 const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 export default function NexuStoreRD() {
  const [data, setData] = useState(null);
@@ -46,6 +46,8 @@ export default function NexuStoreRD() {
  const [glitch, setGlitch] = useState(false);
  const [nuevaCat, setNuevaCat] = useState("");
  const [nuevaCatCompra, setNuevaCatCompra] = useState("");
+ const [reporteModal, setReporteModal] = useState(false);
+ const [reporteRango, setReporteRango] = useState({ desde:"", hasta:"" });
  const canvasRef = useRef(null);
  const imgInputRef = useRef(null);
  // Forms
@@ -768,7 +770,7 @@ export default function NexuStoreRD() {
  NEXU<span style={{ color:"#ff6b35" }}>STORE</span>
  </div>
  <div style={{ color:"#ff6b35", fontSize:11, letterSpacing:4, marginTop:4, fontWeight:700 }}>RD</div>
- <div style={{ fontSize:10, color:"#333", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v5.0</div>
+ <div style={{ fontSize:10, color:"#333", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v5.1</div>
  </div>
  <div style={{ padding:"0 12px", flex:1 }}>
  {NAV.map(item => (
@@ -844,9 +846,9 @@ export default function NexuStoreRD() {
  </span>
  </div>
  </div>
- <button className="btn-glow" onClick={()=>exportReportePDF(data, fmt, anoActual, ventasPorMes, comprasPorMes, totalVentas, totalCompras, margen, margenPct, totalDeudas)}
+ <button className="btn-glow" onClick={()=>setReporteModal(true)}
  style={{ background:"#a78bfa20", color:"#a78bfa", border:"1px solid #a78bfa60", borderRadius:4, cursor:"pointer", fontFamily:"inherit", fontSize:10, fontWeight:700, letterSpacing:1, padding:"7px 12px" }}>
- REPORTE PDF
+ GENERAR REPORTE
  </button>
  </div>
  {/* Gráfico de barras doble */}
@@ -2042,6 +2044,17 @@ export default function NexuStoreRD() {
  </Modal>
  );
  })()}
+ {/* ── MODAL REPORTE POR RANGO DE FECHAS ─────────────────────────── */}
+ {reporteModal && (
+ <ReporteModal
+ data={data}
+ fmt={fmt}
+ MESES={MESES}
+ rango={reporteRango}
+ setRango={setReporteRango}
+ onClose={()=>{ setReporteModal(false); setReporteRango({desde:"",hasta:""}); }}
+ />
+ )}
  </div>
  );
 }
@@ -2120,6 +2133,164 @@ function Select({ children, style={}, ...props }) {
 }
 function Grid2({ children }) {
  return <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>{children}</div>;
+}
+// ── ReporteModal — selector de rango + vista previa + PDF ─────────────────────
+function ReporteModal({ data, fmt, MESES, rango, setRango, onClose }) {
+ const [vista, setVista] = React.useState(false);
+ const filtrar = () => {
+ if (!rango.desde || !rango.hasta) return null;
+ const desde = new Date(rango.desde);
+ const hasta = new Date(rango.hasta);
+ hasta.setHours(23,59,59);
+ const ventas = data.ventas.filter(v=>{ const f=new Date(v.fecha); return f>=desde&&f<=hasta; });
+ const compras = data.compras.filter(c=>{ const f=new Date(c.fecha); return f>=desde&&f<=hasta; });
+ const totalV = ventas.reduce((s,v)=>s+v.total,0);
+ const totalC = compras.reduce((s,c)=>s+(c.total||0),0);
+ const ganancia = totalV - totalC;
+ const rentab = totalC>0 ? ((ganancia/totalC)*100).toFixed(1) : 0;
+ const deudas = data.deudas.filter(d=>{ const f=new Date(d.fecha_registro); return f>=desde&&f<=hasta&&d.estado!=="Pagado"; });
+ const totalD = deudas.reduce((s,d)=>s+(d.monto-d.monto_pagado),0);
+ const mesesData = MESES.map((m,i)=>({
+ mes:m,
+ ventas: ventas.filter(v=>new Date(v.fecha).getMonth()===i).reduce((s,v)=>s+v.total,0),
+ compras: compras.filter(c=>new Date(c.fecha).getMonth()===i).reduce((s,c)=>s+(c.total||0),0),
+ }));
+ const maxBar = Math.max(...mesesData.map(m=>Math.max(m.ventas,m.compras)),1);
+ return { ventas, compras, totalV, totalC, ganancia, rentab, deudas, totalD, mesesData, maxBar };
+ };
+ const res = filtrar();
+ const rangoValido = rango.desde && rango.hasta && new Date(rango.desde)<=new Date(rango.hasta);
+ const generarPDF = () => {
+ if (!res) return;
+ const w = window.open("","_blank");
+ const barH = 120;
+ const barsHTML = res.mesesData.map(m=>{
+ const hV = Math.round((m.ventas/res.maxBar)*barH);
+ const hC = Math.round((m.compras/res.maxBar)*barH);
+ const gan = m.ventas-m.compras;
+ return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
+ <div style="width:100%;display:flex;gap:2px;align-items:flex-end;height:${barH}px;">
+ <div style="flex:1;height:${hV||1}px;background:${m.ventas>0?"#2563eb":"#e5e7eb"};border-radius:2px 2px 0 0;min-height:${m.ventas>0?2:0}px;"></div>
+ <div style="flex:1;height:${hC||1}px;background:${m.compras>0?"#ea580c":"#e5e7eb"};border-radius:2px 2px 0 0;min-height:${m.compras>0?2:0}px;"></div>
+ </div>
+ <div style="font-size:8px;color:#888;">${m.mes}</div>
+ ${m.ventas>0||m.compras>0?`<div style="font-size:7px;color:${gan>=0?"#16a34a":"#dc2626"};font-weight:700;">${gan>=0?"+":""}${Math.round(gan/1000)}K</div>`:""}
+ </div>`;
+ }).join("");
+ const topProds = [...data.productos].filter(p=>p.precio_compra>0)
+ .map(p=>({...p,mp:(((p.precio_venta-p.precio_compra)/p.precio_compra)*100)}))
+ .sort((a,b)=>b.mp-a.mp).slice(0,8);
+ w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+ <title>Reporte NexuStoreRD</title>
+ <style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;background:#fff;color:#222;padding:32px;font-size:13px;}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:14px;border-bottom:3px solid #2563eb;}.logo{font-size:22px;font-weight:900;color:#2563eb;letter-spacing:2px;}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px;}.card{border-radius:8px;padding:14px;border-left:4px solid;}.card-val{font-size:17px;font-weight:900;margin-bottom:4px;}.card-lbl{font-size:10px;color:#888;letter-spacing:1px;text-transform:uppercase;}.st{font-size:11px;font-weight:700;color:#888;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #f0f0f0;}.cw{display:flex;align-items:flex-end;gap:4px;height:${barH+14}px;background:#f8fafc;border-radius:8px;padding:10px 8px 4px;}table{width:100%;border-collapse:collapse;margin-bottom:18px;}th{background:#2563eb;color:#fff;padding:7px 10px;text-align:left;font-size:11px;}td{padding:7px 10px;font-size:12px;border-bottom:1px solid #f0f0f0;}tr:nth-child(even) td{background:#f8fafc;}.footer{margin-top:24px;padding-top:12px;border-top:1px solid #eee;display:flex;justify-content:space-between;font-size:11px;color:#aaa;}@media print{.np{display:none!important;}}</style></head><body>
+ <div class="np" style="text-align:center;margin-bottom:18px;"><button onclick="window.print()" style="background:#2563eb;color:#fff;border:none;padding:10px 26px;border-radius:6px;font-size:14px;cursor:pointer;font-weight:700;margin-right:10px;">&#128424; IMPRIMIR / PDF</button><button onclick="window.close()" style="background:#f3f4f6;color:#555;border:1px solid #ddd;padding:10px 18px;border-radius:6px;cursor:pointer;">CERRAR</button></div>
+ <div class="header"><div><div class="logo">NEXU<span style="color:#ea580c;">STORE</span> <span style="color:#ea580c;">RD</span></div><div style="font-size:11px;color:#888;margin-top:4px;">REPORTE FINANCIERO POR PERÍODO</div><div style="font-size:11px;color:#aaa;margin-top:3px;">Generado el ${new Date().toLocaleDateString("es-DO",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}</div></div><div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:10px 16px;text-align:right;"><div style="font-size:10px;color:#888;letter-spacing:1px;">PERÍODO</div><div style="font-size:14px;font-weight:900;color:#2563eb;">${rango.desde}</div><div style="font-size:11px;color:#888;">al ${rango.hasta}</div></div></div>
+ <div class="cards">${[{label:"Ingresos",val:fmt(res.totalV),color:"#16a34a",bg:"#f0fdf4"},{label:"Gastos",val:fmt(res.totalC),color:"#ea580c",bg:"#fff7ed"},{label:"Ganancia",val:fmt(res.ganancia),color:res.ganancia>=0?"#2563eb":"#dc2626",bg:"#eff6ff"},{label:"Rentabilidad",val:`${res.rentab}%`,color:res.rentab>0?"#16a34a":"#dc2626",bg:"#f0fdf4"}].map(s=>`<div class="card" style="border-left-color:${s.color};background:${s.bg};"><div class="card-val" style="color:${s.color};">${s.val}</div><div class="card-lbl">${s.label}</div></div>`).join("")}</div>
+ <div style="margin-bottom:20px;"><div class="st">&#128202; Ventas vs Gastos por mes</div><div style="display:flex;gap:12px;margin-bottom:8px;"><span style="display:flex;align-items:center;gap:4px;font-size:11px;color:#555;"><span style="width:10px;height:10px;background:#2563eb;border-radius:2px;display:inline-block;"></span>Ventas</span><span style="display:flex;align-items:center;gap:4px;font-size:11px;color:#555;"><span style="width:10px;height:10px;background:#ea580c;border-radius:2px;display:inline-block;"></span>Gastos</span></div><div class="cw">${barsHTML}</div></div>
+ <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:20px;"><div><div class="st">Ventas del período (${res.ventas.length})</div><table><thead><tr><th>CÓDIGO</th><th>CLIENTE</th><th>FECHA</th><th>TOTAL</th><th>ESTADO</th></tr></thead><tbody>${res.ventas.slice(0,10).map(v=>`<tr><td>${v.codigo}</td><td>${v.cliente_nombre}</td><td>${v.fecha}</td><td style="font-weight:700;color:#16a34a;">${fmt(v.total)}</td><td style="color:${v.estado==="Pagado"?"#16a34a":"#dc2626"};font-weight:700;">${v.estado}</td></tr>`).join("")}${res.ventas.length>10?`<tr><td colspan="5" style="color:#888;font-style:italic;">... y ${res.ventas.length-10} más</td></tr>`:""}</tbody></table></div><div><div class="st">Compras del período (${res.compras.length})</div><table><thead><tr><th>CÓDIGO</th><th>PROVEEDOR</th><th>FECHA</th><th>TOTAL</th></tr></thead><tbody>${res.compras.slice(0,10).map(c=>`<tr><td>${c.codigo}</td><td>${c.proveedor}</td><td>${c.fecha}</td><td style="font-weight:700;color:#ea580c;">${fmt(c.total)}</td></tr>`).join("")}${res.compras.length>10?`<tr><td colspan="4" style="color:#888;font-style:italic;">... y ${res.compras.length-10} más</td></tr>`:""}</tbody></table></div></div>
+ <div><div class="st">Margen por producto — Top 8</div><table><thead><tr><th>#</th><th>PRODUCTO</th><th>CATEGORÍA</th><th>COSTO</th><th>P.VENTA</th><th>MARGEN%</th><th>GANANCIA/UND</th><th>STOCK</th></tr></thead><tbody>${topProds.map((p,i)=>`<tr><td>${i+1}</td><td><strong>${p.nombre}</strong></td><td>${p.categoria}</td><td>${fmt(p.precio_compra)}</td><td>${fmt(p.precio_venta)}</td><td style="font-weight:900;color:${p.mp>=60?"#16a34a":p.mp>=30?"#d97706":"#dc2626"};">${p.mp.toFixed(1)}%</td><td style="color:#16a34a;font-weight:700;">${fmt(p.precio_venta-p.precio_compra)}</td><td style="color:${p.stock<=p.stock_minimo?"#dc2626":"#222"};">${p.stock}</td></tr>`).join("")}</tbody></table></div>
+ ${res.deudas.length>0?`<div><div class="st">Deudas pendientes del período (${res.deudas.length})</div><table><thead><tr><th>CLIENTE</th><th>DESCRIPCIÓN</th><th>MONTO</th><th>PAGADO</th><th>PENDIENTE</th></tr></thead><tbody>${res.deudas.map(d=>`<tr><td>${d.cliente_nombre}</td><td>${d.descripcion}</td><td>${fmt(d.monto)}</td><td style="color:#16a34a;">${fmt(d.monto_pagado)}</td><td style="color:#dc2626;font-weight:700;">${fmt(d.monto-d.monto_pagado)}</td></tr>`).join("")}</tbody></table></div>`:""}
+ <div class="footer"><span><strong>NexuStoreRD</strong> — Accesorios de PC | Santo Domingo, Rep. Dominicana</span><span>Período: ${rango.desde} al ${rango.hasta}</span></div>
+ </body></html>`);
+ w.document.close();
+ };
+ return (
+ <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.95)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(8px)"}}
+ onClick={e=>e.target===e.currentTarget&&onClose()}>
+ <div className="fade-in" style={{background:"#080808",border:"1px solid #a78bfa30",borderRadius:12,width:"100%",maxWidth:vista&&res?900:480,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 0 60px #a78bfa15",transition:"max-width .3s"}}>
+ <div style={{padding:"20px 28px",borderBottom:"1px solid #a78bfa20",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+ <div>
+ <h2 style={{fontFamily:"Orbitron,monospace",fontSize:15,fontWeight:900,color:"#a78bfa",letterSpacing:2}}> GENERAR REPORTE</h2>
+ <div style={{fontSize:10,color:"#444",marginTop:4,letterSpacing:1}}>Selecciona el rango de fechas para analizar</div>
+ </div>
+ <button onClick={onClose} style={{background:"none",border:"1px solid #ff3d5740",borderRadius:4,color:"#ff3d57",cursor:"pointer",fontFamily:"inherit",fontSize:12,padding:"6px 12px"}}>✕</button>
+ </div>
+ <div style={{padding:"24px 28px",display:"flex",flexDirection:"column",gap:16}}>
+ <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+ <div>
+ <label style={{fontSize:10,fontWeight:700,color:"#333",display:"block",marginBottom:6,letterSpacing:1.5,fontFamily:"Orbitron,monospace"}}>DESDE *</label>
+ <input type="date" value={rango.desde} onChange={e=>{setRango({...rango,desde:e.target.value});setVista(false);}}
+ style={{width:"100%",padding:"10px 14px",border:"1px solid #a78bfa30",borderRadius:4,fontSize:12,background:"#0a0a0a",color:"#e0e0e0",outline:"none",fontFamily:"inherit"}} />
+ </div>
+ <div>
+ <label style={{fontSize:10,fontWeight:700,color:"#333",display:"block",marginBottom:6,letterSpacing:1.5,fontFamily:"Orbitron,monospace"}}>HASTA *</label>
+ <input type="date" value={rango.hasta} onChange={e=>{setRango({...rango,hasta:e.target.value});setVista(false);}}
+ style={{width:"100%",padding:"10px 14px",border:"1px solid #a78bfa30",borderRadius:4,fontSize:12,background:"#0a0a0a",color:"#e0e0e0",outline:"none",fontFamily:"inherit"}} />
+ </div>
+ </div>
+ {rangoValido && (
+ <div style={{display:"flex",gap:10}}>
+ <button onClick={()=>setVista(true)} className="btn-glow"
+ style={{flex:1,background:"#00d4ff20",color:"#00d4ff",border:"1px solid #00d4ff60",borderRadius:4,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,letterSpacing:1.5,padding:"12px 0",textTransform:"uppercase"}}>
+ VISUALIZAR
+ </button>
+ <button onClick={generarPDF} className="btn-glow"
+ style={{flex:1,background:"#a78bfa20",color:"#a78bfa",border:"1px solid #a78bfa60",borderRadius:4,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,letterSpacing:1.5,padding:"12px 0",textTransform:"uppercase"}}>
+ GENERAR PDF
+ </button>
+ </div>
+ )}
+ {vista && res && (
+ <div className="fade-in" style={{display:"flex",flexDirection:"column",gap:14}}>
+ <div style={{height:1,background:"linear-gradient(to right,transparent,#a78bfa30,transparent)"}} />
+ <div style={{fontFamily:"Orbitron,monospace",fontSize:10,color:"#a78bfa",letterSpacing:2}}>◈ VISTA PREVIA — {rango.desde} AL {rango.hasta}</div>
+ <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+ {[{label:"INGRESOS",val:fmt(res.totalV),color:"#00e676"},{label:"GASTOS",val:fmt(res.totalC),color:"#ff6b35"},{label:"GANANCIA",val:fmt(res.ganancia),color:res.ganancia>=0?"#00d4ff":"#ff3d57"},{label:"RENTAB.",val:`${res.rentab}%`,color:res.rentab>0?"#00e676":"#ff3d57"}].map(s=>(
+ <div key={s.label} style={{background:"#0a0a0a",border:`1px solid ${s.color}30`,borderRadius:6,padding:"12px 14px",textAlign:"center"}}>
+ <div style={{fontSize:14,fontWeight:900,color:s.color}}>{s.val}</div>
+ <div style={{fontSize:8,color:"#333",marginTop:4,letterSpacing:1.5}}>{s.label}</div>
+ </div>
+ ))}
+ </div>
+ <div style={{background:"#0a0a0a",border:"1px solid #a78bfa20",borderRadius:6,padding:14}}>
+ <div style={{fontSize:10,color:"#a78bfa",letterSpacing:1.5,marginBottom:10,fontFamily:"Orbitron,monospace"}}>VENTAS VS GASTOS POR MES</div>
+ <div style={{display:"flex",gap:3,alignItems:"flex-end",height:80}}>
+ {res.mesesData.map((m,i)=>{
+ const hV=res.maxBar>0?(m.ventas/res.maxBar)*70:0;
+ const hC=res.maxBar>0?(m.compras/res.maxBar)*70:0;
+ return (<div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+ <div style={{width:"100%",display:"flex",gap:1,alignItems:"flex-end",height:70}}>
+ <div style={{flex:1,height:`${hV||1}px`,minHeight:m.ventas>0?2:0,background:m.ventas>0?"#00d4ff":"#1a1a1a",borderRadius:"1px 1px 0 0"}} />
+ <div style={{flex:1,height:`${hC||1}px`,minHeight:m.compras>0?2:0,background:m.compras>0?"#ff6b35":"#1a1a1a",borderRadius:"1px 1px 0 0"}} />
+ </div>
+ <div style={{fontSize:6,color:"#333"}}>{m.mes}</div>
+ </div>);
+ })}
+ </div>
+ <div style={{display:"flex",gap:12,marginTop:8}}>
+ <span style={{fontSize:9,color:"#00d4ff",display:"flex",alignItems:"center",gap:4}}><span style={{width:8,height:8,background:"#00d4ff",borderRadius:1,display:"inline-block"}}/> Ventas</span>
+ <span style={{fontSize:9,color:"#ff6b35",display:"flex",alignItems:"center",gap:4}}><span style={{width:8,height:8,background:"#ff6b35",borderRadius:1,display:"inline-block"}}/> Gastos</span>
+ </div>
+ </div>
+ <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,fontSize:12}}>
+ <div style={{background:"#0a0a0a",border:"1px solid #00e67620",borderRadius:6,padding:12}}>
+ <div style={{color:"#00e676",fontFamily:"Orbitron,monospace",fontSize:9,letterSpacing:1.5,marginBottom:8}}>▲ VENTAS ({res.ventas.length})</div>
+ {res.ventas.length===0&&<div style={{color:"#333",fontSize:11}}>Sin ventas en este período</div>}
+ {res.ventas.slice(0,5).map(v=>(<div key={v.id} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #ffffff06",fontSize:11}}><span style={{color:"#aaa"}}>{v.cliente_nombre}</span><span style={{color:"#00e676",fontWeight:700}}>{fmt(v.total)}</span></div>))}
+ {res.ventas.length>5&&<div style={{color:"#333",fontSize:10,marginTop:4}}>+{res.ventas.length-5} más...</div>}
+ </div>
+ <div style={{background:"#0a0a0a",border:"1px solid #ff6b3520",borderRadius:6,padding:12}}>
+ <div style={{color:"#ff6b35",fontFamily:"Orbitron,monospace",fontSize:9,letterSpacing:1.5,marginBottom:8}}>▼ COMPRAS ({res.compras.length})</div>
+ {res.compras.length===0&&<div style={{color:"#333",fontSize:11}}>Sin compras en este período</div>}
+ {res.compras.slice(0,5).map(c=>(<div key={c.id} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #ffffff06",fontSize:11}}><span style={{color:"#aaa"}}>{c.proveedor}</span><span style={{color:"#ff6b35",fontWeight:700}}>{fmt(c.total)}</span></div>))}
+ {res.compras.length>5&&<div style={{color:"#333",fontSize:10,marginTop:4}}>+{res.compras.length-5} más...</div>}
+ </div>
+ </div>
+ {res.deudas.length>0&&(<div style={{background:"#ff3d5710",border:"1px solid #ff3d5730",borderRadius:6,padding:12}}>
+ <div style={{color:"#ff3d57",fontFamily:"Orbitron,monospace",fontSize:9,letterSpacing:1.5,marginBottom:8}}>◆ DEUDAS PENDIENTES ({res.deudas.length}) — {fmt(res.totalD)}</div>
+ {res.deudas.slice(0,4).map(d=>(<div key={d.id} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #ffffff06",fontSize:11}}><span style={{color:"#aaa"}}>{d.cliente_nombre}</span><span style={{color:"#ffd600",fontWeight:700}}>{fmt(d.monto-d.monto_pagado)}</span></div>))}
+ </div>)}
+ <button onClick={generarPDF} className="btn-glow"
+ style={{width:"100%",background:"#a78bfa20",color:"#a78bfa",border:"1px solid #a78bfa60",borderRadius:4,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,letterSpacing:1.5,padding:"12px 0"}}>
+ GENERAR PDF DE ESTE REPORTE
+ </button>
+ </div>
+ )}
+ {!rangoValido&&rango.desde&&rango.hasta&&(<div style={{background:"#ff3d5710",border:"1px solid #ff3d5730",borderRadius:4,padding:"10px 14px",fontSize:12,color:"#ff3d57"}}>⚠ La fecha "Desde" debe ser anterior a "Hasta"</div>)}
+ </div>
+ </div>
+ </div>
+ );
 }
 // ── DescuentoField — selector de descuento por monto $ o porcentaje % ────────
 function DescuentoField({ subtotal, modo, monto, pct, color="#00d4ff", onModoChange, onMontoChange, onPctChange, fmt }) {
