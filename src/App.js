@@ -17,7 +17,7 @@ import NexuStoreRD from "./NexuStoreRD";
 // Estos se crean desde Firebase Console > Authentication > Add user
 // o desde aquí al primer login
 
-const STORAGE_KEY = "nexustorerd-v60";
+const STORAGE_KEY = "nexustorerd-v62";
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -144,12 +144,20 @@ function FirebaseDataWrapper({ user, onLogout, children }) {
 
   return (
     <div style={{ position:"relative" }}>
-      {/* Barra de usuario */}
-      <div style={{ position:"fixed", top:0, right:0, zIndex:9999, display:"flex", alignItems:"center", gap:10, padding:"6px 16px", background:"#050505", borderLeft:"1px solid #00d4ff15", borderBottom:"1px solid #00d4ff15", borderRadius:"0 0 0 8px" }}>
-        <div style={{ width:8, height:8, borderRadius:"50%", background:"#00e676", boxShadow:"0 0 6px #00e676" }} />
-        <span style={{ fontSize:11, color:"#444", fontFamily:"monospace", letterSpacing:1 }}>{user.email}</span>
-        <button
-          onClick={onLogout}
+      {/* Indicador de estado — web: abajo derecha / móvil: encima del menú inferior */}
+      <style>{`
+        .status-bar { position:fixed; bottom:16px; right:16px; z-index:9999; display:flex; align-items:center; gap:8px; padding:6px 14px; background:#050505; border:1px solid #00d4ff15; border-radius:20px; }
+        @media(max-width:768px){
+          .status-bar { bottom:72px; right:12px; padding:4px 10px; border-radius:16px; }
+          .status-email { display:none; }
+          .status-logout { font-size:9px!important; padding:3px 8px!important; }
+        }
+      `}</style>
+      <div className="status-bar">
+        <div style={{ width:7, height:7, borderRadius:"50%", background:"#00e676", boxShadow:"0 0 6px #00e676", flexShrink:0 }} />
+        <span className="status-email" style={{ fontSize:11, color:"#444", fontFamily:"monospace", letterSpacing:1 }}>{user.email}</span>
+        <button onClick={onLogout}
+          className="status-logout"
           style={{ background:"#ff3d5715", color:"#ff3d57", border:"1px solid #ff3d5740", borderRadius:4, cursor:"pointer", fontFamily:"monospace", fontSize:10, fontWeight:700, padding:"4px 10px", letterSpacing:1 }}>
           SALIR
         </button>
