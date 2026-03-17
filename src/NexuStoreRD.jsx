@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 // ═══════════════════════════════════════════════════════════
-// NEXUSTORERD v5.7 — Sistema de Gestión | by Jeffrey Vargas
-// NOVEDADES v5.7: Reporte con mismo patron de cotizaciones — w.document.write sin popups
+// NEXUSTORERD v5.8 — Sistema de Gestión | by Jeffrey Vargas
+// NOVEDADES v5.8: Gráfico del dashboard muestra % ganancia y % gasto sobre ventas por mes
 // ═══════════════════════════════════════════════════════════
 
 const DEMO_DATA = {
@@ -35,7 +35,7 @@ const DEMO_DATA = {
 };
 
 const CATEGORIAS_DEFAULT = ["Mouse","Teclado","Audio","Monitor","Almacenamiento","Accesorios","Cámara","Otro"];
-const STORAGE_KEY = "nexustorerd-v57";
+const STORAGE_KEY = "nexustorerd-v58";
 const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
 export default function NexuStoreRD() {
@@ -814,7 +814,7 @@ export default function NexuStoreRD() {
             NEXU<span style={{ color:"#ff6b35" }}>STORE</span>
           </div>
           <div style={{ color:"#ff6b35", fontSize:11, letterSpacing:4, marginTop:4, fontWeight:700 }}>RD</div>
-          <div style={{ fontSize:10, color:"#333", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v5.7</div>
+          <div style={{ fontSize:10, color:"#333", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v5.8</div>
         </div>
         <div style={{ padding:"0 12px", flex:1 }}>
           {NAV.map(item => (
@@ -898,27 +898,64 @@ export default function NexuStoreRD() {
                       📊 VISUALIZAR REPORTE
                     </button>
                   </div>
-                  {/* Gráfico de barras doble */}
-                  <div style={{ display:"flex", alignItems:"flex-end", gap:4, height:120 }}>
+                  {/* Gráfico de barras doble con porcentajes */}
+                  <div style={{ display:"flex", alignItems:"flex-end", gap:4, height:140 }}>
                     {ventasPorMes.map((v,i) => {
+                      const cVal = comprasPorMes[i].valor;
                       const hV = maxVenta > 0 ? (v.valor/maxVenta)*100 : 0;
-                      const hC = maxVenta > 0 ? (comprasPorMes[i].valor/maxVenta)*100 : 0;
+                      const hC = maxVenta > 0 ? (cVal/maxVenta)*100 : 0;
+                      const ganMes = v.valor - cVal;
+                      const pctGan = v.valor > 0 ? ((ganMes/v.valor)*100).toFixed(0) : null;
+                      const pctGas = v.valor > 0 ? ((cVal/v.valor)*100).toFixed(0) : null;
+                      const tieneData = v.valor > 0 || cVal > 0;
                       return (
-                        <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
+                        <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:1 }}>
+                          {/* Etiquetas de porcentaje */}
+                          <div style={{ width:"100%", display:"flex", gap:1, justifyContent:"center", marginBottom:2, minHeight:16 }}>
+                            {v.valor>0 && pctGan!==null && (
+                              <span style={{ fontSize:6, color: ganMes>=0?"#00e676":"#ff3d57", fontWeight:700, letterSpacing:.3 }}>
+                                {ganMes>=0?"+":""}{pctGan}%
+                              </span>
+                            )}
+                          </div>
+                          {/* Barras */}
                           <div style={{ width:"100%", display:"flex", gap:1, alignItems:"flex-end", height:100 }}>
-                            <div style={{ flex:1, height:`${hV}%`, minHeight: v.valor>0?2:0, background:"#00d4ff", borderRadius:"2px 2px 0 0", opacity:.9 }} title={`Ventas: ${fmt(v.valor)}`} />
-                            <div style={{ flex:1, height:`${hC}%`, minHeight: comprasPorMes[i].valor>0?2:0, background:"#ff6b35", borderRadius:"2px 2px 0 0", opacity:.8 }} title={`Gastos: ${fmt(comprasPorMes[i].valor)}`} />
+                            <div style={{ flex:1, height:`${hV}%`, minHeight: v.valor>0?2:0, background:"#00d4ff", borderRadius:"2px 2px 0 0", opacity:.9, position:"relative" }}
+                              title={`Ventas: ${fmt(v.valor)}${pctGas?` · Gasto rep. ${pctGas}%`:""}`}>
+                              {v.valor>0 && (
+                                <div style={{ position:"absolute", top:-13, left:"50%", transform:"translateX(-50%)", fontSize:6, color:"#00d4ff", whiteSpace:"nowrap", fontWeight:700 }}>
+                                  {Math.round(v.valor/1000)}K
+                                </div>
+                              )}
+                            </div>
+                            <div style={{ flex:1, height:`${hC}%`, minHeight: cVal>0?2:0, background:"#ff6b35", borderRadius:"2px 2px 0 0", opacity:.8, position:"relative" }}
+                              title={`Gastos: ${fmt(cVal)}${pctGas?` · ${pctGas}% del ingreso`:""}`}>
+                              {cVal>0 && (
+                                <div style={{ position:"absolute", top:-13, left:"50%", transform:"translateX(-50%)", fontSize:6, color:"#ff6b35", whiteSpace:"nowrap", fontWeight:700 }}>
+                                  {pctGas}%
+                                </div>
+                              )}
+                            </div>
                           </div>
                           <div style={{ fontSize:7, color:"#333", letterSpacing:.3 }}>{v.mes}</div>
                         </div>
                       );
                     })}
                   </div>
+                  {/* Leyenda de porcentajes */}
+                  <div style={{ display:"flex", gap:14, marginTop:8, paddingTop:6, borderTop:"1px solid #ffffff06" }}>
+                    <span style={{ fontSize:8, color:"#00e676", display:"flex", alignItems:"center", gap:3 }}>
+                      <span style={{ width:6, height:6, background:"#00e676", borderRadius:1, display:"inline-block" }}/> % ganancia sobre ventas
+                    </span>
+                    <span style={{ fontSize:8, color:"#ff6b35", display:"flex", alignItems:"center", gap:3 }}>
+                      <span style={{ width:6, height:6, background:"#ff6b35", borderRadius:1, display:"inline-block" }}/> % gasto sobre ventas
+                    </span>
+                  </div>
                   {/* Totales rápidos del año */}
-                  <div style={{ display:"flex", justifyContent:"space-between", marginTop:12, paddingTop:10, borderTop:"1px solid #ffffff08" }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", marginTop:8, paddingTop:8, borderTop:"1px solid #ffffff08" }}>
                     <div style={{ fontSize:10 }}><span style={{ color:"#444" }}>Ventas {anoActual}: </span><strong style={{ color:"#00d4ff" }}>{fmt(totalVentas)}</strong></div>
                     <div style={{ fontSize:10 }}><span style={{ color:"#444" }}>Gastos: </span><strong style={{ color:"#ff6b35" }}>{fmt(totalCompras)}</strong></div>
-                    <div style={{ fontSize:10 }}><span style={{ color:"#444" }}>Margen: </span><strong style={{ color: margen>=0?"#00e676":"#ff3d57" }}>{fmt(margen)}</strong></div>
+                    <div style={{ fontSize:10 }}><span style={{ color:"#444" }}>Margen: </span><strong style={{ color: margen>=0?"#00e676":"#ff3d57" }}>{fmt(margen)} ({margenPct}%)</strong></div>
                   </div>
                 </div>
                 <div className="card-hover" style={{ background:"#080808", border:"1px solid #00e67620", borderRadius:6, padding:"24px" }}>
