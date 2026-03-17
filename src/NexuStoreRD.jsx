@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 // ═══════════════════════════════════════════════════════════
-// NEXUSTORERD v5.2 — Sistema de Gestión | by Jeffrey Vargas
-// NOVEDADES v5.2: Reporte sin popups — visualización y impresión dentro del sistema
+// NEXUSTORERD v5.3 — Sistema de Gestión | by Jeffrey Vargas
+// NOVEDADES v5.3: PDF generado con jsPDF sin popups ni window.open/print
 // ═══════════════════════════════════════════════════════════
 const DEMO_DATA = {
  productos: [
@@ -33,7 +33,7 @@ const DEMO_DATA = {
  cotizaciones: [],
 };
 const CATEGORIAS_DEFAULT = ["Mouse","Teclado","Audio","Monitor","Almacenamiento","Accesorios","Cámara","Otro"];
-const STORAGE_KEY = "nexustorerd-v52";
+const STORAGE_KEY = "nexustorerd-v53";
 const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 export default function NexuStoreRD() {
  const [data, setData] = useState(null);
@@ -770,7 +770,7 @@ export default function NexuStoreRD() {
  NEXU<span style={{ color:"#ff6b35" }}>STORE</span>
  </div>
  <div style={{ color:"#ff6b35", fontSize:11, letterSpacing:4, marginTop:4, fontWeight:700 }}>RD</div>
- <div style={{ fontSize:10, color:"#333", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v5.2</div>
+ <div style={{ fontSize:10, color:"#333", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v5.3</div>
  </div>
  <div style={{ padding:"0 12px", flex:1 }}>
  {NAV.map(item => (
@@ -2164,34 +2164,133 @@ function ReporteModal({ data, fmt, MESES, rango, setRango, onClose }) {
  };
  const res = filtrar();
  const rangoValido = rango.desde && rango.hasta && new Date(rango.desde)<=new Date(rango.hasta);
- const imprimir = () => {
- const contenido = printRef.current;
- if (!contenido) return;
- const original = document.body.innerHTML;
- document.body.innerHTML = `
- <style>
- * { box-sizing: border-box; margin: 0; padding: 0; }
- body { font-family: Arial, sans-serif; background: #fff; color: #222; padding: 28px; font-size: 13px; }
- .rpt-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 22px; padding-bottom: 14px; border-bottom: 3px solid #2563eb; }
- .rpt-logo { font-size: 22px; font-weight: 900; color: #2563eb; letter-spacing: 2px; }
- .rpt-cards { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 20px; }
- .rpt-card { border-radius: 6px; padding: 12px; border-left: 4px solid; }
- .rpt-card-val { font-size: 16px; font-weight: 900; margin-bottom: 3px; }
- .rpt-card-lbl { font-size: 10px; color: #888; letter-spacing: 1px; text-transform: uppercase; }
- .rpt-section { font-size: 11px; font-weight: 700; color: #888; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1px solid #eee; }
- .rpt-chart { display: flex; align-items: flex-end; gap: 4px; height: 120px; background: #f8fafc; border-radius: 6px; padding: 10px 8px 6px; margin-bottom: 18px; }
- table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
- th { background: #2563eb; color: #fff; padding: 7px 10px; text-align: left; font-size: 11px; }
- td { padding: 7px 10px; font-size: 12px; border-bottom: 1px solid #f0f0f0; }
- tr:nth-child(even) td { background: #f8fafc; }
- .rpt-footer { margin-top: 20px; padding-top: 12px; border-top: 1px solid #eee; display: flex; justify-content: space-between; font-size: 11px; color: #aaa; }
- .rpt-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px; }
- </style>
- ${contenido.innerHTML}
- `;
- window.print();
- document.body.innerHTML = original;
- window.location.reload();
+ const generarPDF = async () => {
+ if (!res) return;
+ // Cargar jsPDF dinámicamente desde CDN
+ if (!window.jspdf) {
+ await new Promise((resolve, reject) => {
+ const s = document.createElement("script");
+ s.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+ s.onload = resolve;
+ s.onerror = reject;
+ document.head.appendChild(s);
+ });
+ }
+ const { jsPDF } = window.jspdf;
+ const doc = new jsPDF({ orientation:"portrait", unit:"mm", format:"a4" });
+ const ancho = doc.internal.pageSize.getWidth();
+ const margen = 15;
+ let y = 20;
+ const fmtNum = n => new Intl.NumberFormat("es-DO",{style:"currency",currency:"DOP",maximumFractionDigits:0}).format(n||0);
+ const addTitle = (txt, size=11, color=[0,100,210]) => {
+ doc.setFontSize(size); doc.setTextColor(...color); doc.setFont(undefined,"bold");
+ doc.text(txt, margen, y); y += size*0.5;
+ };
+ const addLine = () => { doc.setDrawColor(50,50,50); doc.line(margen, y, ancho-margen, y); y += 4; };
+ const addRow = (label, val, colorVal=[200,200,200]) => {
+ doc.setFontSize(9); doc.setFont(undefined,"normal"); doc.setTextColor(130,130,130);
+ doc.text(label, margen, y);
+ doc.setTextColor(...colorVal); doc.setFont(undefined,"bold");
+ doc.text(String(val), ancho-margen, y, {align:"right"});
+ y += 6;
+ };
+ // ── Encabezado ──
+ doc.setFillColor(15,15,40); doc.rect(0,0,ancho,28,"F");
+ doc.setFontSize(18); doc.setFont(undefined,"bold"); doc.setTextColor(0,212,255);
+ doc.text("NEXU", margen, 13);
+ doc.setTextColor(255,107,53); doc.text("STORE", margen+22, 13);
+ doc.setTextColor(255,107,53); doc.text(" RD", margen+50, 13);
+ doc.setFontSize(8); doc.setTextColor(100,100,100); doc.setFont(undefined,"normal");
+ doc.text("REPORTE FINANCIERO POR PERÍODO", margen, 20);
+ doc.text(`Período: ${rango.desde} al ${rango.hasta}`, ancho-margen, 13, {align:"right"});
+ doc.text(`Generado: ${new Date().toLocaleDateString("es-DO")}`, ancho-margen, 20, {align:"right"});
+ y = 36;
+ // ── Resumen 4 tarjetas ──
+ addTitle("RESUMEN FINANCIERO", 11, [0,212,255]); y += 2;
+ const cards = [
+ {l:"Ingresos Totales", v:fmtNum(res.totalV), c:[0,230,118]},
+ {l:"Gastos Totales", v:fmtNum(res.totalC), c:[255,107,53]},
+ {l:"Ganancia Neta", v:fmtNum(res.ganancia), c:res.ganancia>=0?[0,212,255]:[255,61,87]},
+ {l:"Rentabilidad", v:`${res.rentab}%`, c:res.rentab>0?[0,230,118]:[255,61,87]},
+ ];
+ const cw=(ancho-margen*2-9)/4;
+ cards.forEach((c,i)=>{
+ const x=margen+i*(cw+3);
+ doc.setFillColor(20,20,30); doc.roundedRect(x,y,cw,18,2,2,"F");
+ doc.setFontSize(13); doc.setFont(undefined,"bold"); doc.setTextColor(...c.c);
+ doc.text(c.v, x+cw/2, y+9, {align:"center"});
+ doc.setFontSize(7); doc.setFont(undefined,"normal"); doc.setTextColor(80,80,80);
+ doc.text(c.l, x+cw/2, y+14, {align:"center"});
+ });
+ y += 24;
+ addLine();
+ // ── Ventas del período ──
+ addTitle(`VENTAS DEL PERÍODO (${res.ventas.length})`, 10, [0,230,118]); y += 2;
+ if (res.ventas.length===0) { doc.setFontSize(9); doc.setTextColor(80,80,80); doc.text("Sin ventas en este período", margen, y); y+=6; }
+ res.ventas.forEach(v=>{
+ if(y>270){ doc.addPage(); y=20; }
+ doc.setFontSize(9); doc.setFont(undefined,"bold"); doc.setTextColor(200,200,200);
+ doc.text(`${v.codigo} — ${v.cliente_nombre}`, margen, y);
+ doc.setTextColor(0,230,118); doc.text(fmtNum(v.total), ancho-margen, y, {align:"right"});
+ doc.setFontSize(7); doc.setFont(undefined,"normal"); doc.setTextColor(80,80,80);
+ doc.text(`${v.fecha} · ${v.estado}`, margen, y+4);
+ y += 9;
+ });
+ y += 2; addLine();
+ // ── Compras del período ──
+ addTitle(`COMPRAS DEL PERÍODO (${res.compras.length})`, 10, [255,107,53]); y += 2;
+ if (res.compras.length===0) { doc.setFontSize(9); doc.setTextColor(80,80,80); doc.text("Sin compras en este período", margen, y); y+=6; }
+ res.compras.forEach(c=>{
+ if(y>270){ doc.addPage(); y=20; }
+ doc.setFontSize(9); doc.setFont(undefined,"bold"); doc.setTextColor(200,200,200);
+ doc.text(`${c.codigo} — ${c.proveedor}`, margen, y);
+ doc.setTextColor(255,107,53); doc.text(fmtNum(c.total), ancho-margen, y, {align:"right"});
+ doc.setFontSize(7); doc.setFont(undefined,"normal"); doc.setTextColor(80,80,80);
+ doc.text(c.fecha, margen, y+4);
+ y += 9;
+ });
+ y += 2; addLine();
+ // ── Margen por producto ──
+ if(y>220){ doc.addPage(); y=20; }
+ addTitle("MARGEN POR PRODUCTO — TOP 8", 10, [0,212,255]); y += 2;
+ res.topProds.forEach((p,i)=>{
+ if(y>270){ doc.addPage(); y=20; }
+ const color = p.mp>=60?[0,230,118]:p.mp>=30?[255,214,0]:[255,61,87];
+ doc.setFontSize(9); doc.setFont(undefined,"bold"); doc.setTextColor(200,200,200);
+ doc.text(`${i+1}. ${p.nombre}`, margen, y);
+ doc.setTextColor(...color); doc.text(`${p.mp.toFixed(1)}%`, ancho-margen, y, {align:"right"});
+ doc.setFontSize(7); doc.setFont(undefined,"normal"); doc.setTextColor(80,80,80);
+ doc.text(`Costo: ${fmtNum(p.precio_compra)} · Venta: ${fmtNum(p.precio_venta)} · Ganancia: ${fmtNum(p.precio_venta-p.precio_compra)}`, margen, y+4);
+ // barra de margen
+ const bw=ancho-margen*2-30;
+ doc.setFillColor(30,30,30); doc.rect(margen, y+6, bw, 2, "F");
+ doc.setFillColor(...color); doc.rect(margen, y+6, bw*Math.min(1,p.mp/100), 2, "F");
+ y += 12;
+ });
+ // ── Deudas ──
+ if(res.deudas.length>0){
+ y += 2; addLine();
+ if(y>240){ doc.addPage(); y=20; }
+ addTitle(`DEUDAS PENDIENTES (${res.deudas.length}) — ${fmtNum(res.totalD)}`, 10, [255,61,87]); y+=2;
+ res.deudas.forEach(d=>{
+ if(y>270){ doc.addPage(); y=20; }
+ doc.setFontSize(9); doc.setFont(undefined,"bold"); doc.setTextColor(200,200,200);
+ doc.text(d.cliente_nombre, margen, y);
+ doc.setTextColor(255,214,0); doc.text(fmtNum(d.monto-d.monto_pagado), ancho-margen, y, {align:"right"});
+ doc.setFontSize(7); doc.setFont(undefined,"normal"); doc.setTextColor(80,80,80);
+ doc.text(d.descripcion, margen, y+4);
+ y += 9;
+ });
+ }
+ // ── Footer ──
+ const pags = doc.internal.getNumberOfPages();
+ for(let i=1;i<=pags;i++){
+ doc.setPage(i);
+ doc.setFontSize(7); doc.setTextColor(50,50,50);
+ doc.text("NexuStoreRD — Accesorios de PC | Santo Domingo, Rep. Dominicana", margen, 292);
+ doc.text(`Página ${i} de ${pags}`, ancho-margen, 292, {align:"right"});
+ }
+ doc.save(`NexuStoreRD_Reporte_${rango.desde}_${rango.hasta}.pdf`);
  };
  return (
  <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.95)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(8px)"}}
@@ -2227,9 +2326,9 @@ function ReporteModal({ data, fmt, MESES, rango, setRango, onClose }) {
  VISUALIZAR
  </button>
  {vista && res && (
- <button onClick={imprimir} className="btn-glow"
+ <button onClick={generarPDF} className="btn-glow"
  style={{flex:1,background:"#a78bfa20",color:"#a78bfa",border:"1px solid #a78bfa60",borderRadius:4,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,letterSpacing:1.5,padding:"12px 0",textTransform:"uppercase"}}>
- IMPRIMIR / PDF
+ DESCARGAR PDF
  </button>
  )}
  </div>
@@ -2396,9 +2495,9 @@ function ReporteModal({ data, fmt, MESES, rango, setRango, onClose }) {
  </div>
  </div>{/* fin printRef */}
  {/* Botón imprimir al pie */}
- <button onClick={imprimir} className="btn-glow"
+ <button onClick={generarPDF} className="btn-glow"
  style={{width:"100%",marginTop:16,background:"#a78bfa20",color:"#a78bfa",border:"1px solid #a78bfa60",borderRadius:4,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700,letterSpacing:1.5,padding:"13px 0"}}>
- IMPRIMIR / GUARDAR COMO PDF
+ DESCARGAR PDF
  </button>
  </div>
  )}
