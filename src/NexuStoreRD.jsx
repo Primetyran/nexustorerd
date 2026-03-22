@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 // ═══════════════════════════════════════════════════════════
-// NEXUSTORERD v7.2 — Sistema de Gestión | by Jeffrey Vargas
-// NOVEDADES v7.2: Todos los PDFs con tema oscuro NexuStoreRD — negro, cyan, naranja, rojo
+// NEXUSTORERD v7.3 — Sistema de Gestión | by Jeffrey Vargas
+// NOVEDADES v7.3: Modo diurno/nocturno con toggle en sidebar y menú móvil
 // ═══════════════════════════════════════════════════════════
 
 const DEMO_DATA = {
@@ -35,7 +35,7 @@ const DEMO_DATA = {
 };
 
 const CATEGORIAS_DEFAULT = ["Mouse","Teclado","Audio","Monitor","Almacenamiento","Accesorios","Cámara","Otro"];
-const STORAGE_KEY = "nexustorerd-v72";
+const STORAGE_KEY = "nexustorerd-v73";
 const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
 export default function NexuStoreRD() {
@@ -87,6 +87,7 @@ export default function NexuStoreRD() {
   const [nuevaCatDeuda, setNuevaCatDeuda] = useState("");
   const [ventaProdSearch, setVentaProdSearch] = useState("");
   const [abonoForm, setAbonoForm] = useState(emptyAbono);
+  const [darkMode, setDarkMode] = useState(true);
 
   // Load data
   useEffect(() => {
@@ -854,17 +855,27 @@ export default function NexuStoreRD() {
   const filteredClients  = data.clientes.filter(c => c.nombre.toLowerCase().includes(search.toLowerCase()) || (c.cedula||"").includes(search));
 
   return (
-    <div style={{ fontFamily:"'Share Tech Mono','Courier New',monospace", minHeight:"100vh", background:"#000", color:"#e0e0e0", display:"flex", position:"relative", overflow:"hidden" }}>
+    <div style={{ fontFamily:"'Share Tech Mono','Courier New',monospace", minHeight:"100vh", background:darkMode?"#000":"#f0f4f8", color:darkMode?"#e0e0e0":"#111", display:"flex", position:"relative", overflow:"hidden" }}
+      className={darkMode?"dark":"light"}
+      ref={el => { if(el) document.body.className = darkMode?"dark":"light"; }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
         *{box-sizing:border-box;margin:0;padding:0;}
+
+        /* ── TEMA NOCTURNO (default) ── */
+        body.dark{--bg:#000;--bg2:#050505;--bg3:#080808;--bg4:#0a0a0a;--border:#00d4ff15;--border2:#00d4ff20;--text:#e0e0e0;--text2:#aaa;--text3:#666;--text4:#333;--sidebar:#050505;--header:#050505;--row:#ffffff08;--row2:#00d4ff08;}
+        /* ── TEMA DIURNO ── */
+        body.light{--bg:#f0f4f8;--bg2:#ffffff;--bg3:#f8fafc;--bg4:#f1f5f9;--border:#00a3cc20;--border2:#00a3cc30;--text:#111;--text2:#444;--text3:#666;--text4:#999;--sidebar:#fff;--header:#fff;--row:#00000008;--row2:#00a3cc08;}
+
         ::-webkit-scrollbar{width:4px;}
-        ::-webkit-scrollbar-track{background:#050505;}
+        ::-webkit-scrollbar-track{background:var(--bg2);}
         ::-webkit-scrollbar-thumb{background:#00d4ff40;border-radius:2px;}
-        ::-webkit-scrollbar-thumb:hover{background:#00d4ff;}
         input,select,textarea{font-family:'Share Tech Mono',monospace!important;}
-        input::placeholder,textarea::placeholder{color:#333;}
-        select option{background:#0a0a0a;color:#e0e0e0;}
+        input::placeholder,textarea::placeholder{color:var(--text4);}
+        select option{background:var(--bg3);color:var(--text);}
+
+        /* Apply theme variables to key elements */
+        body{background:var(--bg)!important;color:var(--text)!important;}
         @keyframes neonPulse{0%,100%{text-shadow:0 0 5px #00d4ff,0 0 10px #00d4ff,0 0 20px #00d4ff}50%{text-shadow:0 0 2px #00d4ff,0 0 5px #00d4ff}}
         @keyframes scanline{0%{transform:translateY(-100%)}100%{transform:translateY(100vh)}}
         @keyframes glitch{0%,100%{transform:translate(0)}20%{transform:translate(-2px,1px)}40%{transform:translate(2px,-1px)}60%{transform:translate(-1px,2px)}80%{transform:translate(1px,-2px)}}
@@ -876,6 +887,22 @@ export default function NexuStoreRD() {
         .nav-item:hover{background:#00d4ff15!important;color:#00d4ff!important;padding-left:20px!important;}
         .card-hover{transition:all .2s;}
         .card-hover:hover{border-color:#00d4ff60!important;transform:translateY(-2px);box-shadow:0 8px 30px #00d4ff15!important;}
+        body.light .card-hover{background:#ffffff!important;}
+        body.light .row-hover:hover{background:#00d4ff08!important;}
+        body.light .border-glow{border-color:#00d4ff!important;}
+
+        /* ── LIGHT MODE overrides ── */
+        body.light .table-scroll > table tbody tr{background:#ffffff;border-color:#e5e7eb;}
+        body.light .table-scroll > table tbody tr td{border-bottom-color:#f0f0f0;color:#333;}
+        body.light .table-scroll > table thead tr{background:#f8fafc!important;}
+        body.light .table-scroll > table thead th{color:#333!important;}
+        body.light input,body.light select,body.light textarea{background:#f8fafc!important;color:#111!important;border-color:#e5e7eb!important;}
+        body.light .fade-in{animation:fadeInUp .4s ease-out;}
+        body.light .section-header{background:#f0f4f8!important;}
+        body.light .modal-inner{background:#ffffff!important;}
+        body.light .nav-item:hover{background:#00d4ff15!important;}
+        body.light .btn-glow{color:inherit;}
+        body.light .scanline{opacity:.3;}
         .btn-glow:hover{box-shadow:0 0 20px currentColor!important;transform:translateY(-2px);}
         .row-hover:hover{background:#00d4ff08!important;}
         .neon-text{animation:neonPulse 3s ease-in-out infinite;}
@@ -931,7 +958,7 @@ export default function NexuStoreRD() {
             position:sticky;
             top:0;
             z-index:50;
-            background:#000;
+            background:var(--bg,#000);
             padding-bottom:10px;
             flex-shrink:0;
           }
@@ -976,17 +1003,17 @@ export default function NexuStoreRD() {
       )}
 
       {/* ═══ SIDEBAR ═══════════════════════════════════════════════════════ */}
-      <div className="sidebar-desktop" style={{ width:230, background:"#050505", borderRight:"1px solid #00d4ff20", padding:"0 0 24px", flexDirection:"column", position:"relative", zIndex:10, flexShrink:0 }}>
+      <div className="sidebar-desktop" style={{ width:230, background:darkMode?"#050505":"#ffffff", borderRight:`1px solid ${darkMode?"#00d4ff20":"#00d4ff30"}`, padding:"0 0 24px", flexDirection:"column", position:"relative", zIndex:10, flexShrink:0 }}>
         <div style={{ padding:"28px 20px 24px", borderBottom:"1px solid #00d4ff15", marginBottom:12 }}>
           <div className={glitch?"glitch":""} style={{ fontFamily:"Orbitron,monospace", fontSize:20, fontWeight:900, color:"#00d4ff", letterSpacing:3, lineHeight:1.1 }}>
             NEXU<span style={{ color:"#ff6b35" }}>STORE</span>
           </div>
           <div style={{ color:"#ff6b35", fontSize:11, letterSpacing:4, marginTop:4, fontWeight:700 }}>RD</div>
-          <div style={{ fontSize:10, color:"#333", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v7.2</div>
+          <div style={{ fontSize:10, color:darkMode?"#222":"#aaa", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v7.3</div>
         </div>
         <div style={{ padding:"0 12px", flex:1 }}>
           {NAV.map(item => (
-            <div key={item.id} className="nav-item" style={{ padding:"11px 16px", borderRadius:4, cursor:"pointer", fontSize:12, fontWeight:700, letterSpacing:2, color:view===item.id?"#000":"#444", background:view===item.id?"#00d4ff":"transparent", display:"flex", alignItems:"center", gap:12, marginBottom:2, borderLeft:view===item.id?"3px solid #00d4ff":"3px solid transparent", textTransform:"uppercase" }}
+            <div key={item.id} className="nav-item" style={{ padding:"11px 16px", borderRadius:4, cursor:"pointer", fontSize:12, fontWeight:700, letterSpacing:2, color:view===item.id?"#000":darkMode?"#444":"#555", background:view===item.id?"#00d4ff":"transparent", display:"flex", alignItems:"center", gap:12, marginBottom:2, borderLeft:view===item.id?"3px solid #00d4ff":"3px solid transparent", textTransform:"uppercase" }}
               onClick={() => { setView(item.id); setSearch(""); }}>
               <span style={{ fontSize:16 }}>{item.icon}</span>{item.label}
             </div>
@@ -998,15 +1025,20 @@ export default function NexuStoreRD() {
               ⚠ {stockBajo} PRODUCTO{stockBajo>1?"S":""} STOCK BAJO
             </div>
           )}
-          <div style={{ fontSize:10, color:"#222", textAlign:"center", letterSpacing:1 }}>© 2025 NEXUSTORERD</div>
-          <div style={{ fontSize:10, color:"#1a1a1a", textAlign:"center" }}>by Jeffrey Vargas</div>
+          {/* Toggle modo día/noche */}
+          <button onClick={()=>setDarkMode(d=>!d)} className="btn-glow"
+            style={{ width:"100%", marginBottom:10, padding:"9px 0", borderRadius:4, cursor:"pointer", fontFamily:"inherit", fontSize:11, fontWeight:700, letterSpacing:1.5, border:`1px solid ${darkMode?"#ffd60050":"#00d4ff50"}`, background:darkMode?"#ffd60015":"#00d4ff15", color:darkMode?"#ffd600":"#00d4ff", display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+            {darkMode ? "☀ MODO DIURNO" : "🌙 MODO NOCTURNO"}
+          </button>
+          <div style={{ fontSize:10, color:darkMode?"#222":"#aaa", textAlign:"center", letterSpacing:1 }}>© 2025 NEXUSTORERD</div>
+          <div style={{ fontSize:10, color:darkMode?"#1a1a1a":"#bbb", textAlign:"center" }}>by Jeffrey Vargas</div>
         </div>
       </div>
 
       {/* ═══ MAIN ══════════════════════════════════════════════════════════ */}
       <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", position:"relative", zIndex:5 }}>
         {/* Header fijo */}
-        <div className="main-header" style={{ background:"#050505", borderBottom:"1px solid #00d4ff15", padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
+        <div className="main-header" style={{ background:darkMode?"#050505":"#ffffff", borderBottom:`1px solid ${darkMode?"#00d4ff15":"#00d4ff25"}`, padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", flexShrink:0 }}>
           <div>
             <h1 className="neon-text" style={{ fontFamily:"Orbitron,monospace", fontSize:18, fontWeight:900, color:"#00d4ff", letterSpacing:3, textTransform:"uppercase" }}>
               {NAV.find(n=>n.id===view)?.icon} {NAV.find(n=>n.id===view)?.label}
@@ -1026,7 +1058,7 @@ export default function NexuStoreRD() {
         </div>
 
         {/* Content */}
-        <div className="content-pad" style={{ flex:1, overflowY:"auto", padding:"24px 28px", display:"flex", flexDirection:"column" }}>
+        <div className="content-pad" style={{ flex:1, overflowY:"auto", padding:"24px 28px", display:"flex", flexDirection:"column", background:darkMode?"#000":"#f0f4f8" }}>
 
           {/* ── DASHBOARD ─────────────────────────────────────────────── */}
           {view==="dashboard" && (
@@ -1038,7 +1070,7 @@ export default function NexuStoreRD() {
                   { label:"MARGEN BRUTO",    value:fmt(margen),       icon:"◎", color:"#00d4ff", sub:`${margenPct}% rentabilidad` },
                   { label:"DEUDAS ACTIVAS",  value:fmt(totalDeudas),  icon:"◆", color:"#ff3d57", sub:`${data.deudas.filter(d=>d.estado!=="Pagado").length} clientes` },
                 ].map((s,i) => (
-                  <div key={i} className="card-hover" style={{ background:"#080808", border:`1px solid ${s.color}30`, borderTop:`2px solid ${s.color}`, borderRadius:6, padding:"20px 22px", boxShadow:`0 4px 20px ${s.color}10` }}>
+                  <div key={i} className="card-hover" style={{ background:darkMode?"#080808":"#ffffff", border:`1px solid ${s.color}30`, borderTop:`2px solid ${s.color}`, borderRadius:6, padding:"20px 22px", boxShadow:`0 4px 20px ${s.color}10` }}>
                     <div style={{ fontSize:24, color:s.color, marginBottom:10 }}>{s.icon}</div>
                     <div style={{ fontFamily:"Orbitron,monospace", fontSize:18, fontWeight:900, color:s.color, letterSpacing:1 }}>{s.value}</div>
                     <div style={{ fontSize:10, color:"#444", marginTop:6, letterSpacing:1.5 }}>{s.label}</div>
@@ -2537,11 +2569,17 @@ export default function NexuStoreRD() {
         {NAV.map(item => (
           <button key={item.id} className="bottomnav-item"
             onClick={()=>{ setView(item.id); setSearch(""); }}
-            style={{ color: view===item.id?"#00d4ff":"#333" }}>
+            style={{ color: view===item.id?"#00d4ff":darkMode?"#333":"#888" }}>
             <span className="bottomnav-icon">{item.icon}</span>
-            <span className="bottomnav-label" style={{ color: view===item.id?"#00d4ff":"#333" }}>{item.label}</span>
+            <span className="bottomnav-label" style={{ color: view===item.id?"#00d4ff":darkMode?"#333":"#888" }}>{item.label}</span>
           </button>
         ))}
+        {/* Toggle tema en móvil */}
+        <button className="bottomnav-item" onClick={()=>setDarkMode(d=>!d)}
+          style={{ color:darkMode?"#ffd600":"#00d4ff" }}>
+          <span className="bottomnav-icon">{darkMode?"☀":"🌙"}</span>
+          <span className="bottomnav-label" style={{ color:darkMode?"#ffd600":"#00d4ff" }}>{darkMode?"DÍA":"NOCHE"}</span>
+        </button>
       </div>
       {reporteModal && (
         <ReporteModal
@@ -2575,12 +2613,13 @@ function BtnSm({ children, color, onClick }) {
 function Tag({ children, color }) {
   return <span style={{ display:"inline-block", padding:"2px 8px", borderRadius:3, fontSize:10, fontWeight:700, background:`${color}20`, color, letterSpacing:.5, border:`1px solid ${color}40` }}>{children}</span>;
 }
-function Table({ headers, children }) {
+function Table({ headers, children, dm }) {
+  const isDark = dm !== false;
   return (
-    <div className="table-scroll" style={{ background:"#080808", border:"1px solid #00d4ff15", borderRadius:6, overflow:"hidden" }}>
+    <div className="table-scroll" style={{ background:"var(--bg3,#080808)", border:"1px solid #00d4ff15", borderRadius:6, overflow:"hidden" }}>
       <table style={{ width:"100%", borderCollapse:"collapse" }}>
         <thead>
-          <tr style={{ background:"#050505" }}>
+          <tr style={{ background:"var(--bg2,#050505)" }}>
             {headers.map(h => <th key={h} style={{ padding:"12px 16px", fontSize:10, fontWeight:700, color:"#333", letterSpacing:1.5, textAlign:"left", borderBottom:"1px solid #00d4ff15", fontFamily:"Orbitron,monospace" }}>{h}</th>)}
           </tr>
         </thead>
