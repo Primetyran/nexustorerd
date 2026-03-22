@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 // ═══════════════════════════════════════════════════════════
-// NEXUSTORERD v6.7 — Sistema de Gestión | by Jeffrey Vargas
-// NOVEDADES v6.7: Deuda jala/restaura stock, buscador producto en deuda, botón VER PDF deuda
+// NEXUSTORERD v6.8 — Sistema de Gestión | by Jeffrey Vargas
+// NOVEDADES v6.8: Sincronización completa — eliminar venta/deuda restaura stock y elimina el registro vinculado
 // ═══════════════════════════════════════════════════════════
 
 const DEMO_DATA = {
@@ -35,7 +35,7 @@ const DEMO_DATA = {
 };
 
 const CATEGORIAS_DEFAULT = ["Mouse","Teclado","Audio","Monitor","Almacenamiento","Accesorios","Cámara","Otro"];
-const STORAGE_KEY = "nexustorerd-v67";
+const STORAGE_KEY = "nexustorerd-v68";
 const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
 export default function NexuStoreRD() {
@@ -261,6 +261,7 @@ export default function NexuStoreRD() {
       deudas.push({
         id:nextId(data.deudas), cliente_id:+ventaForm.cliente_id, cliente_nombre:cliente.nombre,
         descripcion:`${nuevaVenta.codigo} — ${ventaForm.items.map(i=>i.nombre).join(", ")}`,
+        items: ventaForm.items.map(i=>({ producto_id:i.producto_id, nombre:i.nombre, cantidad:i.cantidad, precio:i.precio })),
         monto:total, monto_pagado:abono, fecha_registro:ventaForm.fecha, fecha_vencimiento:"", estado:estadoDeuda
       });
     }
@@ -270,7 +271,23 @@ export default function NexuStoreRD() {
     setVentaClientSearch(""); setVentaProdSearch("");
     setModal(null);
   };
-  const delVenta = id => { save({...data, ventas:data.ventas.filter(v=>v.id!==id)}); showNotify("Venta eliminada"); setConfirm(null); };
+  const delVenta = id => {
+    const venta = data.ventas.find(v => v.id===id);
+    if (!venta) { setConfirm(null); return; }
+    // 1. Restaurar stock de los productos de la venta
+    const productos = data.productos.map(p => {
+      const item = (venta.items||[]).find(i => i.producto_id === p.id);
+      return item ? { ...p, stock: p.stock + item.cantidad } : p;
+    });
+    // 2. Eliminar deuda vinculada a esta venta (busca por código en descripción)
+    const deudas = data.deudas.filter(d =>
+      !(d.cliente_id === venta.cliente_id && d.descripcion && d.descripcion.includes(venta.codigo))
+    );
+    const ventas = data.ventas.filter(v => v.id !== id);
+    save({...data, ventas, productos, deudas});
+    showNotify("✓ Venta eliminada, stock restaurado y deuda vinculada eliminada");
+    setConfirm(null);
+  };
 
   // ── CRUD Compras ───────────────────────────────────────────────────────────
   const addCompraItem = () => {
@@ -465,13 +482,26 @@ export default function NexuStoreRD() {
   const delDeuda = id => {
     const deuda = data.deudas.find(d => d.id===id);
     if (!deuda) { setConfirm(null); return; }
-    // Restaurar stock al eliminar deuda
-    const productos = data.productos.map(p => {
+    // 1. Restaurar stock de los productos de la deuda
+    let productos = data.productos.map(p => {
       const item = (deuda.items||[]).find(i => i.producto_id === p.id);
       return item ? { ...p, stock: p.stock + item.cantidad } : p;
     });
-    save({...data, deudas:data.deudas.filter(d=>d.id!==id), productos});
-    showNotify("✓ Deuda eliminada y stock restaurado");
+    // 2. Buscar venta vinculada a esta deuda y eliminarla también
+    // (venta vinculada: mismo cliente y descripción contiene el código de la venta)
+    const ventaVinculada = data.ventas.find(v =>
+      v.cliente_id === deuda.cliente_id &&
+      deuda.descripcion && deuda.descripcion.includes(v.codigo)
+    );
+    let ventas = data.ventas;
+    if (ventaVinculada) {
+      // Si la venta también tiene items propios que descontar (no duplicar restauración)
+      // Solo eliminamos la venta sin restaurar stock de nuevo (ya se restauró arriba)
+      ventas = data.ventas.filter(v => v.id !== ventaVinculada.id);
+    }
+    const deudas = data.deudas.filter(d => d.id !== id);
+    save({...data, deudas, ventas, productos});
+    showNotify("✓ Deuda eliminada, venta vinculada eliminada y stock restaurado");
     setConfirm(null);
   };
 
@@ -976,7 +1006,7 @@ export default function NexuStoreRD() {
             NEXU<span style={{ color:"#ff6b35" }}>STORE</span>
           </div>
           <div style={{ color:"#ff6b35", fontSize:11, letterSpacing:4, marginTop:4, fontWeight:700 }}>RD</div>
-          <div style={{ fontSize:10, color:"#333", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v6.7</div>
+          <div style={{ fontSize:10, color:"#333", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v6.8</div>
         </div>
         <div style={{ padding:"0 12px", flex:1 }}>
           {NAV.map(item => (
@@ -1298,7 +1328,7 @@ export default function NexuStoreRD() {
                         )}
                         <BtnSm color="#ffd600" onClick={()=>setModal({type:"editVenta", venta:v})}>EDITAR</BtnSm>
                         {" "}
-                        <BtnSm color="#ff3d57" onClick={()=>setConfirm({title:"¿ELIMINAR VENTA?",msg:"Esta venta será eliminada permanentemente.",onConfirm:()=>delVenta(v.id)})}>DEL</BtnSm>
+                        <BtnSm color="#ff3d57" onClick={()=>setConfirm({title:"¿ELIMINAR VENTA?",msg:"Se eliminará la venta, se restaurará el stock en inventario y si tiene deuda vinculada también será eliminada.",onConfirm:()=>delVenta(v.id)})}>DEL</BtnSm>
                       </TD>
                     </tr>
                   );
@@ -1401,7 +1431,7 @@ export default function NexuStoreRD() {
                             {" "}
                           </>
                         )}
-                        <BtnSm color="#ff3d57" onClick={()=>setConfirm({title:"¿ELIMINAR DEUDA?",msg:"Esta deuda será eliminada y el stock de los productos será restaurado en el inventario.",onConfirm:()=>delDeuda(d.id)})}>DEL</BtnSm>
+                        <BtnSm color="#ff3d57" onClick={()=>setConfirm({title:"¿ELIMINAR DEUDA?",msg:"Se eliminará la deuda, se restaurará el stock en inventario y si tiene venta vinculada también será eliminada.",onConfirm:()=>delDeuda(d.id)})}>DEL</BtnSm>
                       </TD>
                     </tr>
                   );
