@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 // ═══════════════════════════════════════════════════════════
-// NEXUSTORERD v6.6 — Sistema de Gestión | by Jeffrey Vargas
-// NOVEDADES v6.6: Móvil — buscador+header fijo por sección, scroll solo en registros, stock visible en inventario
+// NEXUSTORERD v6.7 — Sistema de Gestión | by Jeffrey Vargas
+// NOVEDADES v6.7: Deuda jala/restaura stock, buscador producto en deuda, botón VER PDF deuda
 // ═══════════════════════════════════════════════════════════
 
 const DEMO_DATA = {
@@ -35,7 +35,7 @@ const DEMO_DATA = {
 };
 
 const CATEGORIAS_DEFAULT = ["Mouse","Teclado","Audio","Monitor","Almacenamiento","Accesorios","Cámara","Otro"];
-const STORAGE_KEY = "nexustorerd-v66";
+const STORAGE_KEY = "nexustorerd-v67";
 const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
 export default function NexuStoreRD() {
@@ -80,6 +80,7 @@ export default function NexuStoreRD() {
   const [cotClientSearch, setCotClientSearch] = useState("");
   const [ventaClientSearch, setVentaClientSearch] = useState("");
   const [deudaClientSearch, setDeudaClientSearch] = useState("");
+  const [deudaProdSearch, setDeudaProdSearch] = useState("");
   const [ventaProdSearch, setVentaProdSearch] = useState("");
   const [abonoForm, setAbonoForm] = useState(emptyAbono);
 
@@ -461,7 +462,18 @@ export default function NexuStoreRD() {
     setAbonoForm(emptyAbono);
     setModal(null);
   };
-  const delDeuda = id => { save({...data, deudas:data.deudas.filter(d=>d.id!==id)}); showNotify("Eliminada"); setConfirm(null); };
+  const delDeuda = id => {
+    const deuda = data.deudas.find(d => d.id===id);
+    if (!deuda) { setConfirm(null); return; }
+    // Restaurar stock al eliminar deuda
+    const productos = data.productos.map(p => {
+      const item = (deuda.items||[]).find(i => i.producto_id === p.id);
+      return item ? { ...p, stock: p.stock + item.cantidad } : p;
+    });
+    save({...data, deudas:data.deudas.filter(d=>d.id!==id), productos});
+    showNotify("✓ Deuda eliminada y stock restaurado");
+    setConfirm(null);
+  };
 
   // ── CRUD Cotizaciones ──────────────────────────────────────────────────────
   const addCotItem = () => {
@@ -577,6 +589,91 @@ export default function NexuStoreRD() {
     <div class="footer">
       <p><strong>NexuStoreRD</strong> — Accesorios de PC | Santo Domingo, República Dominicana</p>
       <p style="margin-top:4px;">Esta cotización es válida hasta ${c.validez||"la fecha indicada"} · Precios en pesos dominicanos (DOP)</p>
+    </div>
+    </body></html>`);
+    w.document.close();
+  };
+
+  // ── Export PDF Deuda ──────────────────────────────────────────────────────
+  const exportDeudaPDF = (d) => {
+    const pendiente = d.monto - d.monto_pagado;
+    const w = window.open("", "_blank");
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <title>Deuda — ${d.cliente_nombre}</title>
+    <style>
+      *{box-sizing:border-box;margin:0;padding:0;}
+      body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#222;padding:40px;font-size:13px;}
+      .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:18px;border-bottom:3px solid #dc2626;}
+      .logo{font-size:26px;font-weight:900;color:#dc2626;letter-spacing:2px;}
+      .logo span{color:#f97316;}
+      .badge{background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px 20px;text-align:right;}
+      .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:28px;}
+      .info-box{background:#fafafa;border-radius:8px;padding:16px 20px;}
+      .info-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f0f0;font-size:13px;}
+      .info-row:last-child{border:none;}
+      .st{font-size:11px;font-weight:700;color:#999;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;}
+      table{width:100%;border-collapse:collapse;margin-bottom:24px;}
+      th{background:#dc2626;color:#fff;padding:9px 12px;text-align:left;font-size:11px;letter-spacing:1px;}
+      th:last-child,td:last-child{text-align:right;}
+      td{padding:9px 12px;font-size:13px;border-bottom:1px solid #f0f0f0;}
+      tr:nth-child(even) td{background:#fef2f2;}
+      .totals{margin-left:auto;width:320px;margin-top:8px;}
+      .total-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f0f0f0;font-size:14px;}
+      .total-pend{display:flex;justify-content:space-between;padding:14px 0 0;font-size:20px;font-weight:900;color:#dc2626;border-top:2px solid #dc2626;margin-top:4px;}
+      .estado{display:inline-block;padding:4px 12px;border-radius:4px;font-size:12px;font-weight:700;}
+      .footer{margin-top:40px;padding-top:16px;border-top:1px solid #eee;text-align:center;font-size:12px;color:#bbb;}
+      @media print{.no-print{display:none!important;}}
+    </style></head><body>
+    <div class="no-print" style="text-align:center;margin-bottom:22px;">
+      <button onclick="window.print()" style="background:#dc2626;color:#fff;border:none;padding:10px 28px;border-radius:6px;font-size:14px;cursor:pointer;font-weight:700;margin-right:10px;">🖨️ IMPRIMIR / GUARDAR PDF</button>
+      <button onclick="window.close()" style="background:#f3f4f6;color:#555;border:1px solid #ddd;padding:10px 18px;border-radius:6px;font-size:14px;cursor:pointer;">CERRAR</button>
+    </div>
+    <div class="header">
+      <div>
+        <div class="logo">NEXU<span style="color:#f97316;">STORE</span> <span style="color:#f97316;">RD</span></div>
+        <div style="font-size:11px;color:#888;margin-top:5px;letter-spacing:2px;">COMPROBANTE DE DEUDA PENDIENTE</div>
+        <div style="font-size:11px;color:#aaa;margin-top:4px;">Generado el ${new Date().toLocaleDateString("es-DO",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}</div>
+      </div>
+      <div class="badge">
+        <div style="font-size:10px;color:#888;">ESTADO</div>
+        <div style="font-size:15px;font-weight:900;color:#dc2626;margin-top:3px;">${d.estado}</div>
+        <div style="font-size:11px;color:#888;margin-top:2px;">D-${String(d.id).padStart(3,"0")}</div>
+      </div>
+    </div>
+    <div class="info-grid">
+      <div class="info-box">
+        <div class="st">👤 Cliente</div>
+        <div class="info-row"><span style="color:#999;">Nombre</span><strong>${d.cliente_nombre}</strong></div>
+        <div class="info-row"><span style="color:#999;">Registro</span><strong>${d.fecha_registro||"—"}</strong></div>
+        <div class="info-row"><span style="color:#999;">Vencimiento</span><strong style="color:${d.fecha_vencimiento?'#dc2626':'#999'}">${d.fecha_vencimiento||"Sin fecha"}</strong></div>
+      </div>
+      <div class="info-box">
+        <div class="st">📋 Deuda</div>
+        <div class="info-row"><span style="color:#999;">Descripción</span><strong>${d.descripcion}</strong></div>
+        <div class="info-row"><span style="color:#999;">Monto total</span><strong>${fmt(d.monto)}</strong></div>
+        <div class="info-row"><span style="color:#999;">Ya pagado</span><strong style="color:#16a34a;">${fmt(d.monto_pagado)}</strong></div>
+      </div>
+    </div>
+    <div class="st" style="margin-bottom:12px;">🛒 Productos de la deuda</div>
+    <table>
+      <thead><tr><th>#</th><th>PRODUCTO</th><th>PRECIO UNIT.</th><th>CANTIDAD</th><th>SUBTOTAL</th></tr></thead>
+      <tbody>
+        ${(d.items||[]).map((item,i)=>`<tr>
+          <td>${i+1}</td><td><strong>${item.nombre}</strong></td>
+          <td>${fmt(item.precio)}</td>
+          <td style="text-align:center;">${item.cantidad}</td>
+          <td>${fmt(item.cantidad*item.precio)}</td>
+        </tr>`).join("")}
+      </tbody>
+    </table>
+    <div class="totals">
+      <div class="total-row"><span style="color:#999;">Total deuda</span><span>${fmt(d.monto)}</span></div>
+      <div class="total-row"><span style="color:#999;">Pagado</span><span style="color:#16a34a;">- ${fmt(d.monto_pagado)}</span></div>
+      <div class="total-pend"><span>PENDIENTE</span><span>${fmt(pendiente)}</span></div>
+    </div>
+    <div class="footer">
+      <p><strong>NexuStoreRD</strong> — Accesorios de PC | Santo Domingo, República Dominicana</p>
+      <p style="margin-top:4px;">Este documento es un comprobante de deuda pendiente · Precios en pesos dominicanos (DOP)</p>
     </div>
     </body></html>`);
     w.document.close();
@@ -879,7 +976,7 @@ export default function NexuStoreRD() {
             NEXU<span style={{ color:"#ff6b35" }}>STORE</span>
           </div>
           <div style={{ color:"#ff6b35", fontSize:11, letterSpacing:4, marginTop:4, fontWeight:700 }}>RD</div>
-          <div style={{ fontSize:10, color:"#333", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v6.6</div>
+          <div style={{ fontSize:10, color:"#333", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v6.7</div>
         </div>
         <div style={{ padding:"0 12px", flex:1 }}>
           {NAV.map(item => (
@@ -917,7 +1014,7 @@ export default function NexuStoreRD() {
             {view==="clientes"     && <Btn color="#00d4ff" onClick={()=>{setClientForm(emptyClient);setModal({type:"client"});}}>＋ CLIENTE</Btn>}
             {view==="ventas"       && <Btn color="#00e676" onClick={()=>{setVentaForm(emptyVenta);setVentaClientSearch("");setVentaProdSearch("");setModal({type:"venta"});}}>＋ VENTA</Btn>}
             {view==="compras"      && <Btn color="#ff6b35" onClick={()=>{setCompraForm(emptyCompra);setModal({type:"compra"});}}>＋ COMPRA</Btn>}
-            {view==="deudas"       && <Btn color="#ff3d57" onClick={()=>{setDeudaForm(emptyDeuda);setDeudaItem(emptyDeudaItem);setDeudaClientSearch("");setModal({type:"deuda"});}}>＋ DEUDA</Btn>}
+            {view==="deudas"       && <Btn color="#ff3d57" onClick={()=>{setDeudaForm(emptyDeuda);setDeudaItem(emptyDeudaItem);setDeudaClientSearch("");setDeudaProdSearch("");setModal({type:"deuda"});}}>＋ DEUDA</Btn>}
             {view==="cotizaciones" && <Btn color="#a78bfa" onClick={()=>{setCotForm(emptyCotizacion);setCotProdSearch("");setCotClientSearch("");setModal({type:"cotizacion"});}}>＋ COTIZACIÓN</Btn>}
           </div>
         </div>
@@ -1292,6 +1389,8 @@ export default function NexuStoreRD() {
                       <TD>{d.fecha_vencimiento||"—"}</TD>
                       <TD><Tag color={d.estado==="Pagado"?"#00e676":d.estado==="Parcial"?"#ffd600":"#ff3d57"}>{d.estado}</Tag></TD>
                       <TD>
+                        <BtnSm color="#00d4ff" onClick={()=>exportDeudaPDF(d)}>VER PDF</BtnSm>
+                        {" "}
                         {d.estado!=="Pagado" && (
                           <>
                             <BtnSm color="#ffd600" onClick={()=>{setAbonoForm(emptyAbono);setModal({type:"abono",deudaId:d.id});}}>ABONO</BtnSm>
@@ -1302,7 +1401,7 @@ export default function NexuStoreRD() {
                             {" "}
                           </>
                         )}
-                        <BtnSm color="#ff3d57" onClick={()=>setConfirm({title:"¿ELIMINAR DEUDA?",msg:"Esta deuda será eliminada.",onConfirm:()=>delDeuda(d.id)})}>DEL</BtnSm>
+                        <BtnSm color="#ff3d57" onClick={()=>setConfirm({title:"¿ELIMINAR DEUDA?",msg:"Esta deuda será eliminada y el stock de los productos será restaurado en el inventario.",onConfirm:()=>delDeuda(d.id)})}>DEL</BtnSm>
                       </TD>
                     </tr>
                   );
@@ -2045,16 +2144,50 @@ export default function NexuStoreRD() {
             <div style={{ fontSize:11, color:"#ff3d57", letterSpacing:2, marginBottom:12, fontFamily:"Orbitron,monospace" }}>
               PRODUCTOS DEL INVENTARIO
             </div>
-            <div style={{ display:"flex", gap:8, marginBottom:12 }}>
-              <Select style={{flex:2}} value={deudaItem.producto_id} onChange={e=>setDeudaItem({...deudaItem,producto_id:e.target.value})}>
-                <option value="">Seleccionar producto...</option>
-                {data.productos.filter(p=>p.stock>0).map(p=>(
-                  <option key={p.id} value={p.id}>{p.nombre} — {fmt(p.precio_venta)} (stock: {p.stock})</option>
-                ))}
-              </Select>
-              <Input style={{width:70}} type="number" min={1} value={deudaItem.cantidad} onChange={e=>setDeudaItem({...deudaItem,cantidad:e.target.value})} placeholder="Cant" />
-              <Btn color="#ff3d57" onClick={addDeudaItem}>＋</Btn>
+            <div style={{ display:"flex", gap:8, marginBottom:8 }}>
+              {/* Buscador de producto por nombre */}
+              <div style={{ flex:2, position:"relative" }}>
+                <input
+                  autoComplete="off"
+                  value={deudaProdSearch}
+                  onChange={e=>{ setDeudaProdSearch(e.target.value); setDeudaItem(f=>({...f,producto_id:""})); }}
+                  placeholder="Buscar producto por nombre..."
+                  style={{ width:"100%", padding:"10px 14px", border:`1px solid ${deudaItem.producto_id?"#ff3d5760":"#1a1a1a"}`, borderRadius:4, fontSize:12, background:"#0a0a0a", color:"#e0e0e0", outline:"none", fontFamily:"inherit" }}
+                />
+                {deudaProdSearch && !deudaItem.producto_id && (
+                  <div style={{ position:"absolute", top:"100%", left:0, right:0, background:"#0d0d0d", border:"1px solid #ff3d5740", borderTop:"none", borderRadius:"0 0 4px 4px", zIndex:50, maxHeight:180, overflowY:"auto" }}>
+                    {data.productos.filter(p=>p.stock>0&&p.nombre.toLowerCase().includes(deudaProdSearch.toLowerCase())).slice(0,6).map(p=>(
+                      <div key={p.id}
+                        onClick={()=>{ setDeudaItem(f=>({...f,producto_id:String(p.id)})); setDeudaProdSearch(p.nombre); }}
+                        style={{ padding:"9px 14px", cursor:"pointer", fontSize:12, borderBottom:"1px solid #ffffff06", display:"flex", justifyContent:"space-between" }}
+                        onMouseEnter={e=>e.currentTarget.style.background="#ff3d5715"}
+                        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                        <span style={{color:"#e0e0e0",fontWeight:600}}>{p.nombre}</span>
+                        <div style={{display:"flex",gap:10,fontSize:11}}>
+                          <span style={{color:"#00e676"}}>{fmt(p.precio_venta)}</span>
+                          <span style={{color:p.stock<=p.stock_minimo?"#ff3d57":"#444"}}>stock: {p.stock}</span>
+                        </div>
+                      </div>
+                    ))}
+                    {data.productos.filter(p=>p.stock>0&&p.nombre.toLowerCase().includes(deudaProdSearch.toLowerCase())).length===0 &&
+                      <div style={{padding:"10px 14px",fontSize:12,color:"#444"}}>Sin resultados</div>
+                    }
+                  </div>
+                )}
+              </div>
+              <Input style={{width:80}} type="number" min={1} value={deudaItem.cantidad} onChange={e=>setDeudaItem({...deudaItem,cantidad:e.target.value})} placeholder="Cant" />
+              <Btn color="#ff3d57" onClick={()=>{ addDeudaItem(); setDeudaProdSearch(""); }}>＋</Btn>
             </div>
+            {/* Confirmación producto seleccionado */}
+            {deudaItem.producto_id && (() => {
+              const p = data.productos.find(x=>x.id===+deudaItem.producto_id);
+              return p ? (
+                <div style={{ background:"#ff3d5710", border:"1px solid #ff3d5730", borderRadius:4, padding:"7px 12px", fontSize:11, color:"#ff3d57", marginBottom:10, display:"flex", justifyContent:"space-between" }}>
+                  <span>✓ <strong>{p.nombre}</strong> — {fmt(p.precio_venta)}</span>
+                  <span style={{color:p.stock<=p.stock_minimo?"#ff3d57":"#555"}}>stock: {p.stock}</span>
+                </div>
+              ) : null;
+            })()}
             {deudaForm.items.map((item,i) => (
               <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderBottom:"1px solid #ffffff08", fontSize:12 }}>
                 <span style={{color:"#aaa"}}>{item.nombre} × {item.cantidad}</span>
