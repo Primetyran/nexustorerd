@@ -17,7 +17,7 @@ import NexuStoreRD from "./NexuStoreRD";
 // Estos se crean desde Firebase Console > Authentication > Add user
 // o desde aquí al primer login
 
-const STORAGE_KEY = "nexustorerd-v73";
+const STORAGE_KEY = "nexustorerd-v74";
 
 export default function App() {
   const [user, setUser] = useState(null);
