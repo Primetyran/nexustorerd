@@ -785,7 +785,7 @@ export default function NexuStoreRD() {
       <span><strong style="color:#00d4ff;">NexuStoreRD</strong> — Accesorios de PC | Santo Domingo, República Dominicana</span>
       <span>Comprobante de deuda pendiente · Precios en DOP</span>
     </div>
-    </body></html>\`);
+    </body></html>`);
     w.document.close();
   };
 
