@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 // ═══════════════════════════════════════════════════════════
-// NEXUSTORERD v7.3 — Sistema de Gestión | by Jeffrey Vargas
-// NOVEDADES v7.3: Modo diurno/nocturno con toggle en sidebar y menú móvil
+// NEXUSTORERD v7.4 — Sistema de Gestión | by Jeffrey Vargas
+// NOVEDADES v7.4: Botón PDF en ventas — comprobante de venta con tema NexuStoreRD
 // ═══════════════════════════════════════════════════════════
 
 const DEMO_DATA = {
@@ -35,7 +35,7 @@ const DEMO_DATA = {
 };
 
 const CATEGORIAS_DEFAULT = ["Mouse","Teclado","Audio","Monitor","Almacenamiento","Accesorios","Cámara","Otro"];
-const STORAGE_KEY = "nexustorerd-v73";
+const STORAGE_KEY = "nexustorerd-v74";
 const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
 export default function NexuStoreRD() {
@@ -700,6 +700,71 @@ export default function NexuStoreRD() {
     w.document.close();
   };
 
+  // ── Export PDF Venta ──────────────────────────────────────────────────────
+  const exportVentaPDF = (v) => {
+    const w = window.open("", "_blank");
+    const fmtN = n => new Intl.NumberFormat("es-DO",{style:"currency",currency:"DOP",maximumFractionDigits:0}).format(n||0);
+    const css = "*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Share Tech Mono','Courier New',monospace;background:#000;color:#e0e0e0;padding:40px;font-size:13px;}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:18px;border-bottom:2px solid #00d4ff40;}.logo-name{font-size:26px;font-weight:900;color:#00d4ff;letter-spacing:4px;}.badge{background:#080808;border:1px solid #00e67630;border-radius:8px;padding:12px 20px;text-align:right;}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:28px;}.info-box{background:#080808;border:1px solid #00d4ff15;border-radius:8px;padding:14px 18px;}.info-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #ffffff08;font-size:12px;}.info-row:last-child{border:none;}.section-title{font-size:10px;font-weight:700;color:#00d4ff;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #00d4ff20;}table{width:100%;border-collapse:collapse;margin-bottom:20px;}th{background:#080808;color:#00d4ff;padding:10px 14px;text-align:left;font-size:10px;letter-spacing:2px;border-bottom:1px solid #00d4ff30;}th:last-child,td:last-child{text-align:right;}td{padding:10px 14px;font-size:12px;border-bottom:1px solid #ffffff08;color:#ccc;}tr:nth-child(even) td{background:#050505;}.totals{margin-left:auto;width:320px;margin-top:8px;}.total-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #ffffff08;font-size:13px;color:#aaa;}.total-final{display:flex;justify-content:space-between;padding:14px 0 0;font-size:18px;font-weight:900;color:#00e676;border-top:2px solid #00e67640;margin-top:4px;}.footer{margin-top:36px;padding-top:16px;border-top:1px solid #00d4ff15;display:flex;justify-content:space-between;font-size:10px;color:#333;}.btn-wrap{text-align:center;margin-bottom:24px;padding:16px;background:#050505;border-bottom:1px solid #00d4ff15;}.btn-print{background:#00d4ff;color:#000;border:none;padding:10px 28px;border-radius:4px;font-size:13px;cursor:pointer;font-weight:700;margin-right:10px;letter-spacing:1px;}.btn-close{background:#0a0a0a;color:#666;border:1px solid #333;padding:10px 20px;border-radius:4px;font-size:13px;cursor:pointer;}@media print{.no-print{display:none!important;}body{background:#000;}}";
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <title>Comprobante ${v.codigo} — NexuStoreRD</title>
+    <style>${css}</style></head><body>
+    <div class="no-print btn-wrap">
+      <button class="btn-print" onclick="window.print()">🖨️ IMPRIMIR / GUARDAR PDF</button>
+      <button class="btn-close" onclick="window.close()">CERRAR</button>
+    </div>
+    <div class="header">
+      <div>
+        <div class="logo-name">NEXU<span style="color:#ff6b35;">STORE</span> <span style="color:#ff6b35;">RD</span></div>
+        <div style="font-size:10px;color:#333;margin-top:4px;letter-spacing:2px;">COMPROBANTE DE VENTA</div>
+        <div style="font-size:10px;color:#333;margin-top:3px;">Santo Domingo, República Dominicana</div>
+      </div>
+      <div class="badge">
+        <div style="font-size:10px;color:#444;letter-spacing:2px;">VENTA N°</div>
+        <div style="font-size:20px;font-weight:900;color:#00e676;margin-top:4px;">${v.codigo}</div>
+        <div style="font-size:11px;color:${v.estado==="Pagado"?"#00e676":"#ff3d57"};margin-top:3px;font-weight:700;">${v.estado}</div>
+      </div>
+    </div>
+    <div class="info-grid">
+      <div class="info-box">
+        <div class="section-title">👤 Cliente</div>
+        <div class="info-row"><span style="color:#444;">Nombre</span><strong style="color:#e0e0e0;">${v.cliente_nombre}</strong></div>
+        <div class="info-row"><span style="color:#444;">Fecha</span><strong style="color:#ccc;">${v.fecha}</strong></div>
+        <div class="info-row"><span style="color:#444;">Código</span><strong style="color:#00d4ff;">${v.codigo}</strong></div>
+      </div>
+      <div class="info-box">
+        <div class="section-title">📋 Resumen</div>
+        <div class="info-row"><span style="color:#444;">Subtotal</span><strong style="color:#ccc;">${fmtN(v.subtotal)}</strong></div>
+        <div class="info-row"><span style="color:#444;">Descuento</span><strong style="color:${(v.descuento||0)>0?"#ff6b35":"#444"};">${(v.descuento||0)>0?"- "+fmtN(v.descuento):"—"}</strong></div>
+        <div class="info-row"><span style="color:#444;">Estado</span><strong style="color:${v.estado==="Pagado"?"#00e676":"#ff3d57"};">${v.estado}</strong></div>
+      </div>
+    </div>
+    <div class="section-title" style="margin-bottom:14px;">🛒 Productos</div>
+    <table>
+      <thead><tr><th>#</th><th>PRODUCTO</th><th>PRECIO UNIT.</th><th>CANT.</th><th>SUBTOTAL</th></tr></thead>
+      <tbody>
+        ${(v.items||[]).map((item,i)=>`<tr>
+          <td style="color:#555;">${i+1}</td>
+          <td style="color:#e0e0e0;font-weight:700;">${item.nombre}</td>
+          <td>${fmtN(item.precio)}</td>
+          <td style="text-align:center;">${item.cantidad}</td>
+          <td style="color:#00e676;font-weight:700;">${fmtN(item.cantidad*item.precio)}</td>
+        </tr>`).join("")}
+      </tbody>
+    </table>
+    <div class="totals">
+      <div class="total-row"><span style="color:#444;">Subtotal</span><span>${fmtN(v.subtotal)}</span></div>
+      ${(v.descuento||0)>0?`<div class="total-row"><span style="color:#444;">Descuento</span><span style="color:#ff6b35;">- ${fmtN(v.descuento)}</span></div>`:""}
+      <div class="total-final"><span>TOTAL</span><span>${fmtN(v.total)}</span></div>
+    </div>
+    ${v.notas?`<div style="background:#ffd60010;border:1px solid #ffd60030;border-radius:6px;padding:12px 16px;margin-top:16px;font-size:12px;color:#ffd600;">📌 <strong>Notas:</strong> ${v.notas}</div>`:""}
+    <div class="footer">
+      <span><strong style="color:#00d4ff;">NexuStoreRD</strong> — Accesorios de PC | Santo Domingo, República Dominicana</span>
+      <span>Precios en pesos dominicanos (DOP)</span>
+    </div>
+    </body></html>`);
+    w.document.close();
+  };
+
   // ── Export PDF Deuda ──────────────────────────────────────────────────────
   const exportDeudaPDF = (d) => {
     const pendiente = d.monto - d.monto_pagado;
@@ -1009,7 +1074,7 @@ export default function NexuStoreRD() {
             NEXU<span style={{ color:"#ff6b35" }}>STORE</span>
           </div>
           <div style={{ color:"#ff6b35", fontSize:11, letterSpacing:4, marginTop:4, fontWeight:700 }}>RD</div>
-          <div style={{ fontSize:10, color:darkMode?"#222":"#aaa", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v7.3</div>
+          <div style={{ fontSize:10, color:darkMode?"#222":"#aaa", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v7.4</div>
         </div>
         <div style={{ padding:"0 12px", flex:1 }}>
           {NAV.map(item => (
@@ -1331,6 +1396,8 @@ export default function NexuStoreRD() {
                       <TD color="#00e676"><strong>{fmt(v.total)}</strong></TD>
                       <TD><Tag color={v.estado==="Pagado"?"#00e676":v.estado==="Anulado"?"#666":"#ff3d57"}>{v.estado}</Tag></TD>
                       <TD>
+                        <BtnSm color="#00e676" onClick={()=>exportVentaPDF(v)}>PDF</BtnSm>
+                        {" "}
                         {prodConImg && (
                           <><BtnSm color="#00d4ff" onClick={()=>setModal({type:"verVenta", venta:v})}>VER</BtnSm>{" "}</>
                         )}
