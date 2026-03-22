@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 // ═══════════════════════════════════════════════════════════
-// NEXUSTORERD v6.8 — Sistema de Gestión | by Jeffrey Vargas
-// NOVEDADES v6.8: Sincronización completa — eliminar venta/deuda restaura stock y elimina el registro vinculado
+// NEXUSTORERD v7.2 — Sistema de Gestión | by Jeffrey Vargas
+// NOVEDADES v7.2: Todos los PDFs con tema oscuro NexuStoreRD — negro, cyan, naranja, rojo
 // ═══════════════════════════════════════════════════════════
 
 const DEMO_DATA = {
@@ -35,7 +35,7 @@ const DEMO_DATA = {
 };
 
 const CATEGORIAS_DEFAULT = ["Mouse","Teclado","Audio","Monitor","Almacenamiento","Accesorios","Cámara","Otro"];
-const STORAGE_KEY = "nexustorerd-v68";
+const STORAGE_KEY = "nexustorerd-v72";
 const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
 export default function NexuStoreRD() {
@@ -60,7 +60,7 @@ export default function NexuStoreRD() {
   const emptyVenta = { cliente_id:"", fecha:new Date().toISOString().split("T")[0], items:[], descuento:"0", descuentoModo:"$", descuentoPct:"0", estado:"Pagado", abonoInicial:"0", notas:"" };
   const emptyCompra = { proveedor:"", fecha:new Date().toISOString().split("T")[0], items:[], gastoCourier:"0", notas:"" };
   const emptyCompraItem = { nombre:"", categoria:"Mouse", cantidad:"", costo:"", precio_venta:"", stock_minimo:"5", imagen:"" };
-  const emptyDeuda = { cliente_id:"", descripcion:"", monto:"", fecha_vencimiento:"", items:[] };
+  const emptyDeuda = { cliente_id:"", descripcion:"", monto:"", fecha_vencimiento:"", items:[], abonoInicial:"0" };
   const emptyDeudaItem = { producto_id:"", cantidad:"1" };
   const emptyCotizacion = { cliente_id:"", fecha:new Date().toISOString().split("T")[0], validez:"", items:[], descuentoPct:"0", descuento:"0", descuentoModo:"$", notas:"" };
   const emptyAbono = { monto:"", nota:"" };
@@ -81,6 +81,10 @@ export default function NexuStoreRD() {
   const [ventaClientSearch, setVentaClientSearch] = useState("");
   const [deudaClientSearch, setDeudaClientSearch] = useState("");
   const [deudaProdSearch, setDeudaProdSearch] = useState("");
+  const [deudaTabProd, setDeudaTabProd] = useState("inventario"); // "inventario" | "externo"
+  const emptyDeudaExterno = { nombre:"", precio:"", cantidad:"1", categoria:"Otro" };
+  const [deudaItemExterno, setDeudaItemExterno] = useState(emptyDeudaExterno);
+  const [nuevaCatDeuda, setNuevaCatDeuda] = useState("");
   const [ventaProdSearch, setVentaProdSearch] = useState("");
   const [abonoForm, setAbonoForm] = useState(emptyAbono);
 
@@ -397,6 +401,23 @@ export default function NexuStoreRD() {
     setDeudaItem({ producto_id:"", cantidad:"1" });
   };
 
+  const addDeudaItemExterno = () => {
+    const nombre = deudaItemExterno.nombre.trim();
+    const precio = +deudaItemExterno.precio;
+    const cant = +deudaItemExterno.cantidad;
+    if (!nombre) { showNotify("⚠ El nombre del artículo es obligatorio","error"); return; }
+    if (!precio || precio <= 0) { showNotify("⚠ El precio debe ser mayor a 0","error"); return; }
+    if (!cant || cant < 1) { showNotify("⚠ La cantidad debe ser al menos 1","error"); return; }
+    // Agregar con producto_id = null para identificarlo como externo
+    setDeudaForm(f => ({
+      ...f,
+      items:[...f.items, { producto_id:null, externo:true, nombre, cantidad:cant, precio, categoria: deudaItemExterno.categoria }],
+      monto: String(f.items.reduce((s,i)=>s+i.cantidad*i.precio,0) + cant*precio),
+      descripcion: f.descripcion || nombre,
+    }));
+    setDeudaItemExterno(emptyDeudaExterno);
+  };
+
   const removeDeudaItem = (idx) => {
     setDeudaForm(f => {
       const items = f.items.filter((_,i) => i !== idx);
@@ -409,27 +430,72 @@ export default function NexuStoreRD() {
     const cliente = data.clientes.find(c => c.id===+deudaForm.cliente_id);
     const monto = deudaForm.items.reduce((s,i)=>s+i.cantidad*i.precio,0);
     const descripcion = deudaForm.descripcion || deudaForm.items.map(i=>i.nombre).join(", ");
-    // Descontar stock
-    const productos = data.productos.map(p => {
-      const item = deudaForm.items.find(i => i.producto_id === p.id);
-      return item ? { ...p, stock: p.stock - item.cantidad } : p;
+    const abono = Math.min(+deudaForm.abonoInicial||0, monto);
+    const estadoDeuda = abono >= monto ? "Pagado" : abono > 0 ? "Parcial" : "Pendiente";
+    const tieneExternos = deudaForm.items.some(i=>i.externo);
+
+    // ── Procesar productos en inventario ──
+    let productos = [...data.productos];
+    const itemsConId = deudaForm.items.map(item => {
+      if (item.externo) {
+        const existeIdx = productos.findIndex(p => p.nombre.toLowerCase()===item.nombre.toLowerCase());
+        if (existeIdx >= 0) {
+          productos[existeIdx] = { ...productos[existeIdx], stock: Math.max(0, productos[existeIdx].stock - item.cantidad) };
+          return { ...item, producto_id: productos[existeIdx].id, externo:true };
+        } else {
+          const newId = nextId(productos);
+          productos.push({
+            id:newId, codigo:nextCode("NX",productos), nombre:item.nombre,
+            categoria:item.categoria||"Otro", stock:0, stock_minimo:1,
+            precio_compra:0, precio_venta:item.precio, imagen:"", estado:"Activo",
+          });
+          return { ...item, producto_id:newId, externo:true };
+        }
+      } else {
+        productos = productos.map(p =>
+          p.id===item.producto_id ? {...p, stock:p.stock-item.cantidad} : p
+        );
+        return item;
+      }
     });
-    const nueva = {
-      id:nextId(data.deudas),
-      cliente_id:+deudaForm.cliente_id,
-      cliente_nombre:cliente.nombre,
-      descripcion,
-      items: deudaForm.items,
-      monto,
-      monto_pagado:0,
-      fecha_registro:today(),
-      fecha_vencimiento:deudaForm.fecha_vencimiento||"",
-      estado:"Pendiente"
+
+    // ── Crear deuda ──
+    const nuevaDeudaId = nextId(data.deudas);
+    const nuevaVentaId = nextId(data.ventas);
+    const codigoVenta  = nextCode("VTA", data.ventas);
+
+    const nuevaDeuda = {
+      id: nuevaDeudaId,
+      cliente_id:+deudaForm.cliente_id, cliente_nombre:cliente.nombre,
+      descripcion: tieneExternos ? `${codigoVenta} — ${descripcion}` : descripcion,
+      items: itemsConId, monto, monto_pagado:abono,
+      fecha_registro:today(), fecha_vencimiento:deudaForm.fecha_vencimiento||"",
+      estado: estadoDeuda
     };
-    save({...data, deudas:[...data.deudas, nueva], productos});
-    showNotify("✓ Deuda registrada y stock actualizado");
+
+    // ── Si hay artículos externos, crear también la venta vinculada ──
+    let ventas = [...data.ventas];
+    if (tieneExternos) {
+      const ventaItems = itemsConId.map(i=>({
+        producto_id:i.producto_id, nombre:i.nombre, cantidad:i.cantidad, precio:i.precio
+      }));
+      const nuevaVenta = {
+        id:nuevaVentaId, codigo:codigoVenta,
+        cliente_id:+deudaForm.cliente_id, cliente_nombre:cliente.nombre,
+        fecha:today(), items:ventaItems,
+        subtotal:monto, descuento:0, descuentoModo:"$", descuentoPct:"0",
+        total:monto, estado:estadoDeuda==="Pagado"?"Pagado":"Pendiente",
+        abonoInicial:String(abono), notas:"Registrado desde deudas — artículo externo"
+      };
+      ventas = [...ventas, nuevaVenta];
+    }
+
+    save({...data, deudas:[...data.deudas, nuevaDeuda], ventas, productos});
+    showNotify("✓ Deuda registrada" + (tieneExternos ? ", venta creada y artículos en inventario" : " y stock actualizado"));
     setDeudaForm(emptyDeuda);
     setDeudaItem(emptyDeudaItem);
+    setDeudaItemExterno(emptyDeudaExterno);
+    setDeudaTabProd("inventario");
     setModal(null);
   };
   const pagarDeuda = id => {
@@ -541,84 +607,93 @@ export default function NexuStoreRD() {
     if (!c) return;
     const w = window.open("", "_blank");
     w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
-    <title>Cotización ${c.codigo}</title>
-    <style>
-      *{box-sizing:border-box;margin:0;padding:0;}
-      body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#222;padding:40px;font-size:14px;}
-      .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:40px;padding-bottom:20px;border-bottom:3px solid #6d28d9;}
-      .logo{font-size:28px;font-weight:900;color:#6d28d9;letter-spacing:2px;}
-      .logo span{color:#f97316;}
-      .logo-sub{font-size:11px;color:#999;letter-spacing:3px;margin-top:2px;}
-      .cod-box{background:#f3f0ff;border:1px solid #c4b5fd;border-radius:8px;padding:12px 20px;text-align:right;}
-      .cod-num{font-size:22px;font-weight:900;color:#6d28d9;}
-      .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:36px;}
-      .info-box{background:#fafafa;border-radius:8px;padding:16px 20px;}
-      .info-row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f0f0f0;}
+    <title>Cotización ${c.codigo} — NexuStoreRD</title>
+    <style>*{box-sizing:border-box;margin:0;padding:0;}
+      @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap');
+      body{font-family:'Share Tech Mono','Courier New',monospace;background:#000;color:#e0e0e0;padding:36px;font-size:13px;}
+      .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:18px;border-bottom:2px solid #00d4ff40;}
+      .logo{font-family:'Orbitron',monospace;font-size:28px;font-weight:900;color:#00d4ff;letter-spacing:4px;}
+      .logo .orange{color:#ff6b35;}
+      .logo-sub{font-size:10px;color:#333;letter-spacing:3px;margin-top:4px;text-transform:uppercase;}
+      .logo-city{font-size:11px;color:#333;margin-top:6px;}
+      .badge{background:#080808;border:1px solid #00d4ff30;border-radius:8px;padding:12px 20px;text-align:right;}
+      .badge-label{font-size:10px;color:#444;letter-spacing:2px;text-transform:uppercase;}
+      .badge-val{font-family:'Orbitron',monospace;font-size:20px;font-weight:900;color:#00d4ff;margin-top:4px;}
+      .badge-sub{font-size:11px;color:#444;margin-top:3px;}
+      .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:28px;}
+      .info-box{background:#080808;border:1px solid #00d4ff15;border-radius:8px;padding:14px 18px;}
+      .info-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #ffffff08;font-size:12px;}
       .info-row:last-child{border:none;}
-      .section-title{font-size:11px;font-weight:700;color:#999;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;}
-      table{width:100%;border-collapse:collapse;margin-bottom:24px;}
-      th{background:#6d28d9;color:#fff;padding:10px 14px;text-align:left;font-size:12px;letter-spacing:1px;}
+      .section-title{font-family:'Orbitron',monospace;font-size:10px;font-weight:700;color:#00d4ff;letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid #00d4ff20;}
+      table{width:100%;border-collapse:collapse;margin-bottom:20px;}
+      th{background:#080808;color:#00d4ff;padding:10px 14px;text-align:left;font-size:10px;letter-spacing:2px;border-bottom:1px solid #00d4ff30;}
       th:last-child,td:last-child{text-align:right;}
-      tr:nth-child(even){background:#f9f7ff;}
-      td{padding:10px 14px;font-size:13px;border-bottom:1px solid #f0f0f0;}
-      .totals{margin-left:auto;width:300px;}
-      .total-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f0f0f0;font-size:14px;}
-      .total-final{display:flex;justify-content:space-between;padding:14px 0 0;font-size:18px;font-weight:900;color:#6d28d9;border-top:2px solid #6d28d9;margin-top:4px;}
-      .footer{margin-top:40px;padding-top:20px;border-top:1px solid #eee;text-align:center;font-size:12px;color:#bbb;}
-      .notes{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px 18px;margin-bottom:24px;font-size:13px;color:#92400e;}
-      @media print{.no-print{display:none!important;}}
-    </style></head><body>
-    <div class="no-print" style="text-align:center;margin-bottom:20px;">
-      <button onclick="window.print()" style="background:#6d28d9;color:#fff;border:none;padding:10px 28px;border-radius:6px;font-size:14px;cursor:pointer;font-weight:700;margin-right:10px;">🖨️ IMPRIMIR / GUARDAR PDF</button>
-      <button onclick="window.close()" style="background:#f3f4f6;color:#555;border:1px solid #ddd;padding:10px 20px;border-radius:6px;font-size:14px;cursor:pointer;">CERRAR</button>
+      td{padding:10px 14px;font-size:12px;border-bottom:1px solid #ffffff08;color:#ccc;}
+      tr:nth-child(even) td{background:#050505;}
+      .totals{margin-left:auto;width:320px;margin-top:8px;}
+      .total-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #ffffff08;font-size:13px;color:#aaa;}
+      .total-final{display:flex;justify-content:space-between;padding:14px 0 0;font-family:'Orbitron',monospace;font-size:18px;font-weight:900;color:#00d4ff;border-top:2px solid #00d4ff40;margin-top:4px;}
+      .notes{background:#ffd60010;border:1px solid #ffd60030;border-radius:6px;padding:12px 16px;margin-bottom:20px;font-size:12px;color:#ffd600;}
+      .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;}
+      .card{border-radius:6px;padding:14px;border-left:3px solid;background:#080808;}
+      .card-val{font-family:'Orbitron',monospace;font-size:16px;font-weight:900;margin-bottom:4px;}
+      .card-lbl{font-size:9px;color:#444;letter-spacing:1.5px;text-transform:uppercase;}
+      .st{font-family:'Orbitron',monospace;font-size:10px;font-weight:700;color:#00d4ff;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #00d4ff20;}
+      .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:20px;}
+      .footer{margin-top:36px;padding-top:16px;border-top:1px solid #00d4ff15;display:flex;justify-content:space-between;font-size:10px;color:#333;}
+      .btn-print{background:#00d4ff;color:#000;border:none;padding:10px 28px;border-radius:4px;font-size:13px;cursor:pointer;font-weight:700;margin-right:10px;font-family:inherit;letter-spacing:1px;}
+      .btn-close{background:#0a0a0a;color:#666;border:1px solid #333;padding:10px 20px;border-radius:4px;font-size:13px;cursor:pointer;font-family:inherit;}
+      .btn-wrap{text-align:center;margin-bottom:24px;padding:16px;background:#050505;border-bottom:1px solid #00d4ff15;}
+      @media print{.no-print{display:none!important;}body{background:#fff;color:#111;}th{background:#000;color:#00d4ff;}.info-box{background:#f8f8f8;border-color:#ddd;}.badge{background:#f0f0f0;}.total-final{color:#00d4ff;}}</style></head><body>
+    <div class="no-print btn-wrap">
+      <button class="btn-print" onclick="window.print()">🖨️ IMPRIMIR / GUARDAR PDF</button>
+      <button class="btn-close" onclick="window.close()">CERRAR</button>
     </div>
     <div class="header">
-      <div>
-        <div class="logo">NEXU<span>STORE</span> <span style="color:#f97316;">RD</span></div>
-        <div class="logo-sub">ACCESORIOS DE PC</div>
-        <div style="font-size:12px;color:#999;margin-top:8px;">Santo Domingo, República Dominicana</div>
-      </div>
-      <div class="cod-box">
-        <div style="font-size:11px;color:#999;">COTIZACIÓN N°</div>
-        <div class="cod-num">${c.codigo}</div>
-        <div style="font-size:12px;color:#999;margin-top:4px;">Estado: <strong style="color:#6d28d9;">${c.estado}</strong></div>
+      <div><div class="logo">NEXU<span class="orange">STORE</span> <span class="orange">RD</span></div>
+        <div class="logo-sub">Sistema de Gestión · Accesorios de PC</div>
+        <div class="logo-city">Santo Domingo, República Dominicana</div></div>
+      <div class="badge">
+        <div class="badge-label">COTIZACIÓN N°</div>
+        <div class="badge-val">${c.codigo}</div>
+        <div class="badge-sub" style="color:#ff6b35;">${c.estado}</div>
       </div>
     </div>
     <div class="info-grid">
       <div class="info-box">
-        <div class="section-title">📋 Datos de la cotización</div>
-        <div class="info-row"><span style="color:#999;">Fecha emisión</span><strong>${c.fecha}</strong></div>
-        <div class="info-row"><span style="color:#999;">Válida hasta</span><strong>${c.validez||"—"}</strong></div>
-        <div class="info-row"><span style="color:#999;">Código</span><strong>${c.codigo}</strong></div>
+        <div class="section-title">📋 Cotización</div>
+        <div class="info-row"><span style="color:#444;">Fecha emisión</span><strong style="color:#e0e0e0;">${c.fecha}</strong></div>
+        <div class="info-row"><span style="color:#444;">Válida hasta</span><strong style="color:#ffd600;">${c.validez||"—"}</strong></div>
+        <div class="info-row"><span style="color:#444;">Código</span><strong style="color:#00d4ff;">${c.codigo}</strong></div>
       </div>
       <div class="info-box">
         <div class="section-title">👤 Cliente</div>
-        <div class="info-row"><span style="color:#999;">Nombre</span><strong>${c.cliente_nombre}</strong></div>
-        <div class="info-row"><span style="color:#999;">Teléfono</span><strong>${c.cliente_telefono||"—"}</strong></div>
-        <div class="info-row"><span style="color:#999;">Correo</span><strong>${c.cliente_email||"—"}</strong></div>
+        <div class="info-row"><span style="color:#444;">Nombre</span><strong style="color:#e0e0e0;">${c.cliente_nombre}</strong></div>
+        <div class="info-row"><span style="color:#444;">Teléfono</span><strong style="color:#e0e0e0;">${c.cliente_telefono||"—"}</strong></div>
+        <div class="info-row"><span style="color:#444;">Correo</span><strong style="color:#e0e0e0;">${c.cliente_email||"—"}</strong></div>
       </div>
     </div>
     ${c.notas ? `<div class="notes">📌 <strong>Notas:</strong> ${c.notas}</div>` : ""}
-    <div class="section-title" style="margin-bottom:12px;">🛒 Productos cotizados</div>
+    <div class="section-title" style="margin-bottom:14px;">🛒 Productos cotizados</div>
     <table>
       <thead><tr><th>#</th><th>PRODUCTO</th><th>PRECIO UNIT.</th><th>CANT.</th><th>SUBTOTAL</th></tr></thead>
       <tbody>
         ${c.items.map((item,i) => `<tr>
-          <td>${i+1}</td><td>${item.nombre}</td>
-          <td style="text-align:right;">${new Intl.NumberFormat("es-DO",{style:"currency",currency:"DOP",maximumFractionDigits:0}).format(item.precio)}</td>
-          <td style="text-align:center;">${item.cantidad}</td>
-          <td>${new Intl.NumberFormat("es-DO",{style:"currency",currency:"DOP",maximumFractionDigits:0}).format(item.cantidad*item.precio)}</td>
+          <td style="color:#555;">${i+1}</td><td style="color:#e0e0e0;font-weight:700;">${item.nombre}</td>
+          <td style="text-align:right;color:#ccc;">${new Intl.NumberFormat("es-DO",{style:"currency",currency:"DOP",maximumFractionDigits:0}).format(item.precio)}</td>
+          <td style="text-align:center;color:#ccc;">${item.cantidad}</td>
+          <td style="color:#00e676;font-weight:700;">${new Intl.NumberFormat("es-DO",{style:"currency",currency:"DOP",maximumFractionDigits:0}).format(item.cantidad*item.precio)}</td>
         </tr>`).join("")}
       </tbody>
     </table>
     <div class="totals">
-      <div class="total-row"><span style="color:#999;">Subtotal</span><span>${new Intl.NumberFormat("es-DO",{style:"currency",currency:"DOP",maximumFractionDigits:0}).format(c.subtotal)}</span></div>
-      ${c.descuento>0 ? `<div class="total-row"><span style="color:#999;">Descuento (${c.descuentoPct||0}%)</span><span style="color:#ef4444;">- ${new Intl.NumberFormat("es-DO",{style:"currency",currency:"DOP",maximumFractionDigits:0}).format(c.descuento)}</span></div>` : ""}
+      <div class="total-row"><span style="color:#444;">Subtotal</span><span>${new Intl.NumberFormat("es-DO",{style:"currency",currency:"DOP",maximumFractionDigits:0}).format(c.subtotal)}</span></div>
+      ${c.descuento>0 ? `<div class="total-row"><span style="color:#444;">Descuento (${c.descuentoPct||0}%)</span><span style="color:#ff3d57;">- ${new Intl.NumberFormat("es-DO",{style:"currency",currency:"DOP",maximumFractionDigits:0}).format(c.descuento)}</span></div>` : ""}
       <div class="total-final"><span>TOTAL</span><span>${new Intl.NumberFormat("es-DO",{style:"currency",currency:"DOP",maximumFractionDigits:0}).format(c.total)}</span></div>
     </div>
     <div class="footer">
-      <p><strong>NexuStoreRD</strong> — Accesorios de PC | Santo Domingo, República Dominicana</p>
-      <p style="margin-top:4px;">Esta cotización es válida hasta ${c.validez||"la fecha indicada"} · Precios en pesos dominicanos (DOP)</p>
+      <span><strong style="color:#00d4ff;">NexuStoreRD</strong> — Accesorios de PC | Santo Domingo, República Dominicana</span>
+      <span>Válida hasta ${c.validez||"fecha indicada"} · Precios en DOP</span>
     </div>
     </body></html>`);
     w.document.close();
@@ -629,236 +704,137 @@ export default function NexuStoreRD() {
     const pendiente = d.monto - d.monto_pagado;
     const w = window.open("", "_blank");
     w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
-    <title>Deuda — ${d.cliente_nombre}</title>
-    <style>
-      *{box-sizing:border-box;margin:0;padding:0;}
-      body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#222;padding:40px;font-size:13px;}
-      .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:18px;border-bottom:3px solid #dc2626;}
-      .logo{font-size:26px;font-weight:900;color:#dc2626;letter-spacing:2px;}
-      .logo span{color:#f97316;}
-      .badge{background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px 20px;text-align:right;}
+    <title>Deuda — ${d.cliente_nombre} — NexuStoreRD</title>
+    <style>*{box-sizing:border-box;margin:0;padding:0;}
+      @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap');
+      body{font-family:'Share Tech Mono','Courier New',monospace;background:#000;color:#e0e0e0;padding:36px;font-size:13px;}
+      .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:18px;border-bottom:2px solid #00d4ff40;}
+      .logo{font-family:'Orbitron',monospace;font-size:26px;font-weight:900;color:#00d4ff;letter-spacing:4px;}
+      .logo .orange{color:#ff6b35;}
+      .logo-sub{font-size:10px;color:#333;letter-spacing:3px;margin-top:4px;}
+      .badge{background:#080808;border:1px solid #00d4ff30;border-radius:8px;padding:12px 20px;text-align:right;}
+      .badge-label{font-size:10px;color:#444;letter-spacing:2px;text-transform:uppercase;}
+      .badge-val{font-family:'Orbitron',monospace;font-size:18px;font-weight:900;color:#00d4ff;margin-top:4px;}
+      .badge-sub{font-size:11px;color:#444;margin-top:3px;}
       .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:28px;}
-      .info-box{background:#fafafa;border-radius:8px;padding:16px 20px;}
-      .info-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f0f0;font-size:13px;}
+      .info-box{background:#080808;border:1px solid #00d4ff15;border-radius:8px;padding:14px 18px;}
+      .info-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #ffffff08;font-size:12px;}
       .info-row:last-child{border:none;}
-      .st{font-size:11px;font-weight:700;color:#999;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;}
-      table{width:100%;border-collapse:collapse;margin-bottom:24px;}
-      th{background:#dc2626;color:#fff;padding:9px 12px;text-align:left;font-size:11px;letter-spacing:1px;}
+      .section-title{font-family:'Orbitron',monospace;font-size:10px;font-weight:700;color:#00d4ff;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #00d4ff20;}
+      table{width:100%;border-collapse:collapse;margin-bottom:20px;}
+      th{background:#080808;color:#00d4ff;padding:10px 14px;text-align:left;font-size:10px;letter-spacing:2px;border-bottom:1px solid #00d4ff30;}
       th:last-child,td:last-child{text-align:right;}
-      td{padding:9px 12px;font-size:13px;border-bottom:1px solid #f0f0f0;}
-      tr:nth-child(even) td{background:#fef2f2;}
+      td{padding:10px 14px;font-size:12px;border-bottom:1px solid #ffffff08;color:#ccc;}
+      tr:nth-child(even) td{background:#050505;}
       .totals{margin-left:auto;width:320px;margin-top:8px;}
-      .total-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f0f0f0;font-size:14px;}
-      .total-pend{display:flex;justify-content:space-between;padding:14px 0 0;font-size:20px;font-weight:900;color:#dc2626;border-top:2px solid #dc2626;margin-top:4px;}
-      .estado{display:inline-block;padding:4px 12px;border-radius:4px;font-size:12px;font-weight:700;}
-      .footer{margin-top:40px;padding-top:16px;border-top:1px solid #eee;text-align:center;font-size:12px;color:#bbb;}
-      @media print{.no-print{display:none!important;}}
-    </style></head><body>
-    <div class="no-print" style="text-align:center;margin-bottom:22px;">
-      <button onclick="window.print()" style="background:#dc2626;color:#fff;border:none;padding:10px 28px;border-radius:6px;font-size:14px;cursor:pointer;font-weight:700;margin-right:10px;">🖨️ IMPRIMIR / GUARDAR PDF</button>
-      <button onclick="window.close()" style="background:#f3f4f6;color:#555;border:1px solid #ddd;padding:10px 18px;border-radius:6px;font-size:14px;cursor:pointer;">CERRAR</button>
-    </div>
+      .total-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #ffffff08;font-size:13px;color:#aaa;}
+      .total-final{display:flex;justify-content:space-between;padding:14px 0 0;font-family:'Orbitron',monospace;font-size:18px;font-weight:900;color:#00d4ff;border-top:2px solid #00d4ff40;margin-top:4px;}
+      .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;}
+      .card{border-radius:6px;padding:14px;border-left:3px solid;background:#080808;}
+      .card-val{font-family:'Orbitron',monospace;font-size:16px;font-weight:900;margin-bottom:4px;}
+      .card-lbl{font-size:9px;color:#444;letter-spacing:1.5px;text-transform:uppercase;}
+      .st{font-family:'Orbitron',monospace;font-size:10px;color:#00d4ff;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #00d4ff20;}
+      .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:20px;}
+      .footer{margin-top:36px;padding-top:16px;border-top:1px solid #00d4ff15;display:flex;justify-content:space-between;font-size:10px;color:#333;}
+      .btn-wrap{text-align:center;margin-bottom:24px;padding:16px;background:#050505;border-bottom:1px solid #00d4ff15;}
+      .btn-print{background:#00d4ff;color:#000;border:none;padding:10px 28px;border-radius:4px;font-size:13px;cursor:pointer;font-weight:700;margin-right:10px;font-family:inherit;letter-spacing:1px;}
+      .btn-close{background:#0a0a0a;color:#666;border:1px solid #333;padding:10px 20px;border-radius:4px;font-size:13px;cursor:pointer;font-family:inherit;}
+      @media print{.no-print{display:none!important;}body{background:#000;}}</style></head><body>
+    <div class="no-print btn-wrap"><button class="btn-print" onclick="window.print()">🖨️ IMPRIMIR / GUARDAR PDF</button><button class="btn-close" onclick="window.close()">CERRAR</button></div>
     <div class="header">
-      <div>
-        <div class="logo">NEXU<span style="color:#f97316;">STORE</span> <span style="color:#f97316;">RD</span></div>
-        <div style="font-size:11px;color:#888;margin-top:5px;letter-spacing:2px;">COMPROBANTE DE DEUDA PENDIENTE</div>
-        <div style="font-size:11px;color:#aaa;margin-top:4px;">Generado el ${new Date().toLocaleDateString("es-DO",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}</div>
-      </div>
+      <div><div class="logo">NEXU<span class="orange">STORE</span> <span class="orange">RD</span></div><div class="logo-sub">SISTEMA DE GESTIÓN · ACCESORIOS DE PC</div><div style="font-size:10px;color:#333;margin-top:4px;">Santo Domingo, República Dominicana</div></div>
       <div class="badge">
-        <div style="font-size:10px;color:#888;">ESTADO</div>
-        <div style="font-size:15px;font-weight:900;color:#dc2626;margin-top:3px;">${d.estado}</div>
-        <div style="font-size:11px;color:#888;margin-top:2px;">D-${String(d.id).padStart(3,"0")}</div>
+        <div class="badge-label">COMPROBANTE DE DEUDA</div>
+        <div class="badge-val" style="color:#ff3d57;">D-${String(d.id).padStart(3,"0")}</div>
+        <div class="badge-sub" style="color:${d.estado==="Pagado"?"#00e676":d.estado==="Parcial"?"#ffd600":"#ff3d57"};">${d.estado}</div>
       </div>
     </div>
     <div class="info-grid">
       <div class="info-box">
-        <div class="st">👤 Cliente</div>
-        <div class="info-row"><span style="color:#999;">Nombre</span><strong>${d.cliente_nombre}</strong></div>
-        <div class="info-row"><span style="color:#999;">Registro</span><strong>${d.fecha_registro||"—"}</strong></div>
-        <div class="info-row"><span style="color:#999;">Vencimiento</span><strong style="color:${d.fecha_vencimiento?'#dc2626':'#999'}">${d.fecha_vencimiento||"Sin fecha"}</strong></div>
+        <div class="section-title">👤 Cliente</div>
+        <div class="info-row"><span style="color:#444;">Nombre</span><strong style="color:#e0e0e0;">${d.cliente_nombre}</strong></div>
+        <div class="info-row"><span style="color:#444;">Registro</span><strong style="color:#ccc;">${d.fecha_registro||"—"}</strong></div>
+        <div class="info-row"><span style="color:#444;">Vencimiento</span><strong style="color:${d.fecha_vencimiento?"#ffd600":"#444"};">${d.fecha_vencimiento||"Sin fecha"}</strong></div>
       </div>
       <div class="info-box">
-        <div class="st">📋 Deuda</div>
-        <div class="info-row"><span style="color:#999;">Descripción</span><strong>${d.descripcion}</strong></div>
-        <div class="info-row"><span style="color:#999;">Monto total</span><strong>${fmt(d.monto)}</strong></div>
-        <div class="info-row"><span style="color:#999;">Ya pagado</span><strong style="color:#16a34a;">${fmt(d.monto_pagado)}</strong></div>
+        <div class="section-title">📋 Resumen</div>
+        <div class="info-row"><span style="color:#444;">Descripción</span><strong style="color:#ccc;">${d.descripcion}</strong></div>
+        <div class="info-row"><span style="color:#444;">Total deuda</span><strong style="color:#ff3d57;">${fmt(d.monto)}</strong></div>
+        <div class="info-row"><span style="color:#444;">Ya pagado</span><strong style="color:#00e676;">${fmt(d.monto_pagado)}</strong></div>
       </div>
     </div>
-    <div class="st" style="margin-bottom:12px;">🛒 Productos de la deuda</div>
+    <div class="section-title" style="margin-bottom:14px;">🛒 Productos de la deuda</div>
     <table>
       <thead><tr><th>#</th><th>PRODUCTO</th><th>PRECIO UNIT.</th><th>CANTIDAD</th><th>SUBTOTAL</th></tr></thead>
       <tbody>
         ${(d.items||[]).map((item,i)=>`<tr>
-          <td>${i+1}</td><td><strong>${item.nombre}</strong></td>
-          <td>${fmt(item.precio)}</td>
-          <td style="text-align:center;">${item.cantidad}</td>
-          <td>${fmt(item.cantidad*item.precio)}</td>
+          <td style="color:#555;">${i+1}</td>
+          <td style="color:#e0e0e0;font-weight:700;">${item.nombre}${item.externo?' <span style="background:#ffd60020;color:#ffd600;border:1px solid #ffd60030;border-radius:3px;font-size:9px;padding:1px 5px;margin-left:4px;">EXT</span>':''}</td>
+          <td style="color:#ccc;">${fmt(item.precio)}</td>
+          <td style="text-align:center;color:#ccc;">${item.cantidad}</td>
+          <td style="color:#ff6b35;font-weight:700;">${fmt(item.cantidad*item.precio)}</td>
         </tr>`).join("")}
       </tbody>
     </table>
     <div class="totals">
-      <div class="total-row"><span style="color:#999;">Total deuda</span><span>${fmt(d.monto)}</span></div>
-      <div class="total-row"><span style="color:#999;">Pagado</span><span style="color:#16a34a;">- ${fmt(d.monto_pagado)}</span></div>
-      <div class="total-pend"><span>PENDIENTE</span><span>${fmt(pendiente)}</span></div>
+      <div class="total-row"><span style="color:#444;">Total deuda</span><span style="color:#ff3d57;">${fmt(d.monto)}</span></div>
+      <div class="total-row"><span style="color:#444;">Pagado</span><span style="color:#00e676;">- ${fmt(d.monto_pagado)}</span></div>
+      <div class="total-final" style="color:#ff3d57;border-top-color:#ff3d5740;"><span>PENDIENTE</span><span>${fmt(pendiente)}</span></div>
     </div>
     <div class="footer">
-      <p><strong>NexuStoreRD</strong> — Accesorios de PC | Santo Domingo, República Dominicana</p>
-      <p style="margin-top:4px;">Este documento es un comprobante de deuda pendiente · Precios en pesos dominicanos (DOP)</p>
+      <span><strong style="color:#00d4ff;">NexuStoreRD</strong> — Accesorios de PC | Santo Domingo, República Dominicana</span>
+      <span>Comprobante de deuda pendiente · Precios en DOP</span>
     </div>
-    </body></html>`);
+    </body></html>\`);
     w.document.close();
   };
 
-  // ── Export Reporte PDF ─────────────────────────────────────────────────────
+    // ── Export Reporte PDF ─────────────────────────────────────────────────────
   const exportReportePDF = (data, fmt, ano, ventasPorMes, comprasPorMes, totalVentas, totalCompras, margen, margenPct, totalDeudas) => {
     const w = window.open("", "_blank");
-    const mesActual = new Date().toLocaleDateString("es-DO",{month:"long",year:"numeric"}).toUpperCase();
-    const maxVal = Math.max(...ventasPorMes.map(v=>v.valor), ...comprasPorMes.map(c=>c.valor), 1);
-    const barH = 140;
-    const barsHTML = MESES.map((m,i) => {
-      const hV = Math.round((ventasPorMes[i].valor/maxVal)*barH);
-      const hC = Math.round((comprasPorMes[i].valor/maxVal)*barH);
-      const gan = ventasPorMes[i].valor - comprasPorMes[i].valor;
-      return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
-        <div style="width:100%;display:flex;gap:2px;align-items:flex-end;height:${barH}px;">
-          <div style="flex:1;height:${hV}px;background:#2563eb;border-radius:2px 2px 0 0;" title="Ventas"></div>
-          <div style="flex:1;height:${hC}px;background:#ea580c;border-radius:2px 2px 0 0;" title="Gastos"></div>
-        </div>
-        <div style="font-size:8px;color:#888;margin-top:2px;">${m}</div>
-        ${ventasPorMes[i].valor>0||comprasPorMes[i].valor>0?`<div style="font-size:7px;color:${gan>=0?'#16a34a':'#dc2626'};font-weight:700;">${gan>=0?'+':''}${Math.round(gan/1000)}K</div>`:''}
-      </div>`;
+    const maxVal = Math.max(...ventasPorMes.map(v=>v.valor),...comprasPorMes.map(c=>c.valor),1);
+    const barH = 130;
+    const topProds = [...data.productos].filter(p=>p.precio_compra>0)
+      .map(p=>({...p,mp:(((p.precio_venta-p.precio_compra)/p.precio_compra)*100)}))
+      .sort((a,b)=>b.mp-a.mp).slice(0,8);
+    const barsHTML = MESES.map((m,i)=>{
+      const hV=Math.round((ventasPorMes[i].valor/maxVal)*barH);
+      const hC=Math.round((comprasPorMes[i].valor/maxVal)*barH);
+      const gan=ventasPorMes[i].valor-comprasPorMes[i].valor;
+      return "<div style='flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;'><div style='width:100%;display:flex;gap:2px;align-items:flex-end;height:"+barH+"px;'><div style='flex:1;height:"+(hV||1)+"px;background:"+(ventasPorMes[i].valor>0?"#00d4ff":"#1a1a1a")+";border-radius:2px 2px 0 0;'></div><div style='flex:1;height:"+(hC||1)+"px;background:"+(comprasPorMes[i].valor>0?"#ff6b35":"#1a1a1a")+";border-radius:2px 2px 0 0;'></div></div><div style='font-size:8px;color:#444;margin-top:2px;'>"+m+"</div>"+(ventasPorMes[i].valor>0||comprasPorMes[i].valor>0?"<div style='font-size:7px;color:"+(gan>=0?"#00e676":"#ff3d57")+";font-weight:700;'>"+(gan>=0?"+":"")+Math.round(gan/1000)+"K</div>":"")+"</div>";
     }).join("");
-
-    const topProds = [...data.productos]
-      .filter(p=>p.precio_compra>0)
-      .map(p=>({...p,margenPct:(((p.precio_venta-p.precio_compra)/p.precio_compra)*100)}))
-      .sort((a,b)=>b.margenPct-a.margenPct)
-      .slice(0,8);
-
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
-    <title>Reporte Financiero ${ano} — NexuStoreRD</title>
-    <style>
-      *{box-sizing:border-box;margin:0;padding:0;}
-      body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#222;padding:36px;font-size:13px;}
-      .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:18px;border-bottom:3px solid #2563eb;}
-      .logo{font-size:26px;font-weight:900;color:#2563eb;letter-spacing:2px;}
-      .logo span{color:#ea580c;}
-      .badge{background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:10px 18px;text-align:right;}
-      .badge-title{font-size:10px;color:#888;letter-spacing:1px;text-transform:uppercase;}
-      .badge-val{font-size:18px;font-weight:900;color:#2563eb;margin-top:2px;}
-      .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:28px;}
-      .card{background:#f8fafc;border-radius:8px;padding:16px;border-left:4px solid;}
-      .card-val{font-size:20px;font-weight:900;margin-bottom:4px;}
-      .card-lbl{font-size:10px;color:#888;letter-spacing:1px;text-transform:uppercase;}
-      .section{margin-bottom:28px;}
-      .section-title{font-size:11px;font-weight:700;color:#888;letter-spacing:2px;text-transform:uppercase;margin-bottom:14px;padding-bottom:6px;border-bottom:1px solid #f0f0f0;}
-      .chart-wrap{display:flex;align-items:flex-end;gap:4px;height:${barH+20}px;background:#f8fafc;border-radius:8px;padding:16px 12px 8px;}
-      table{width:100%;border-collapse:collapse;}
-      th{background:#2563eb;color:#fff;padding:9px 12px;text-align:left;font-size:11px;letter-spacing:1px;}
-      td{padding:9px 12px;font-size:12px;border-bottom:1px solid #f0f0f0;}
-      tr:nth-child(even) td{background:#f8fafc;}
-      .bar-legend{display:flex;gap:16px;margin-bottom:10px;}
-      .bar-legend span{display:flex;align-items:center;gap:5px;font-size:11px;color:#555;}
-      .dot{width:10px;height:10px;border-radius:2px;display:inline-block;}
-      .footer{margin-top:32px;padding-top:16px;border-top:1px solid #eee;display:flex;justify-content:space-between;font-size:11px;color:#aaa;}
-      @media print{.no-print{display:none!important;}}
-    </style></head><body>
-    <div class="no-print" style="text-align:center;margin-bottom:24px;">
-      <button onclick="window.print()" style="background:#2563eb;color:#fff;border:none;padding:10px 28px;border-radius:6px;font-size:14px;cursor:pointer;font-weight:700;margin-right:10px;">🖨️ IMPRIMIR / GUARDAR PDF</button>
-      <button onclick="window.close()" style="background:#f3f4f6;color:#555;border:1px solid #ddd;padding:10px 20px;border-radius:6px;font-size:14px;cursor:pointer;">CERRAR</button>
-    </div>
-    <div class="header">
-      <div>
-        <div class="logo">NEXU<span>STORE</span> <span style="color:#ea580c;">RD</span></div>
-        <div style="font-size:11px;color:#888;margin-top:4px;letter-spacing:2px;">REPORTE FINANCIERO ANUAL</div>
-        <div style="font-size:12px;color:#aaa;margin-top:6px;">Generado el ${new Date().toLocaleDateString("es-DO",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}</div>
-      </div>
-      <div class="badge">
-        <div class="badge-title">Período</div>
-        <div class="badge-val">${ano}</div>
-      </div>
-    </div>
-
-    <div class="cards">
-      ${[
-        {label:"Ingresos Totales",  val:fmt(totalVentas),  color:"#16a34a", bg:"#f0fdf4"},
-        {label:"Gastos Totales",    val:fmt(totalCompras), color:"#ea580c", bg:"#fff7ed"},
-        {label:"Ganancia Neta",     val:fmt(margen),       color: margen>=0?"#2563eb":"#dc2626", bg:"#eff6ff"},
-        {label:"Rentabilidad",      val:`${margenPct}%`,   color: margenPct>0?"#16a34a":"#dc2626", bg:"#f0fdf4"},
-      ].map(s=>`<div class="card" style="border-left-color:${s.color};background:${s.bg};">
-        <div class="card-val" style="color:${s.color};">${s.val}</div>
-        <div class="card-lbl">${s.label}</div>
-      </div>`).join("")}
-    </div>
-
-    <div class="section">
-      <div class="section-title">📊 Ventas vs Gastos por mes — ${ano}</div>
-      <div class="bar-legend">
-        <span><span class="dot" style="background:#2563eb;"></span>Ventas</span>
-        <span><span class="dot" style="background:#ea580c;"></span>Gastos</span>
-        <span style="margin-left:auto;font-size:10px;color:#aaa;">Número sobre cada mes = ganancia del mes (K = miles DOP)</span>
-      </div>
-      <div class="chart-wrap">${barsHTML}</div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">📦 Margen de ganancia por producto</div>
-      <table>
-        <thead><tr><th>#</th><th>PRODUCTO</th><th>CATEGORÍA</th><th>COSTO</th><th>P. VENTA</th><th>MARGEN %</th><th>GANANCIA/UND</th><th>STOCK</th></tr></thead>
-        <tbody>
-          ${topProds.map((p,i)=>`<tr>
-            <td>${i+1}</td>
-            <td><strong>${p.nombre}</strong></td>
-            <td>${p.categoria}</td>
-            <td>${fmt(p.precio_compra)}</td>
-            <td>${fmt(p.precio_venta)}</td>
-            <td style="font-weight:900;color:${p.margenPct>=60?'#16a34a':p.margenPct>=30?'#d97706':'#dc2626'};">${p.margenPct.toFixed(1)}%</td>
-            <td style="color:#16a34a;font-weight:700;">${fmt(p.precio_venta-p.precio_compra)}</td>
-            <td style="color:${p.stock<=p.stock_minimo?'#dc2626':'#222'};">${p.stock}</td>
-          </tr>`).join("")}
-        </tbody>
-      </table>
-    </div>
-
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;" class="section">
-      <div>
-        <div class="section-title">💰 Resumen financiero</div>
-        <table>
-          ${[
-            {label:"Total ventas registradas", val:data.ventas.length+" transacciones"},
-            {label:"Total compras registradas", val:data.compras.length+" órdenes"},
-            {label:"Ventas pendientes de cobro", val:fmt(data.ventas.filter(v=>v.estado==="Pendiente").reduce((s,v)=>s+v.total,0))},
-            {label:"Deudas por cobrar", val:fmt(totalDeudas)},
-            {label:"Productos en inventario", val:data.productos.length+" productos"},
-            {label:"Clientes registrados", val:data.clientes.length+" clientes"},
-            {label:"Cotizaciones activas", val:data.cotizaciones?.filter(c=>c.estado==="Vigente").length||0},
-          ].map(r=>`<tr><td style="color:#888;">${r.label}</td><td style="font-weight:700;text-align:right;">${r.val}</td></tr>`).join("")}
-        </table>
-      </div>
-      <div>
-        <div class="section-title">⚠ Alertas de inventario</div>
-        ${data.productos.filter(p=>p.stock<=p.stock_minimo).length===0
-          ? '<div style="padding:16px;background:#f0fdf4;border-radius:6px;color:#16a34a;font-size:13px;">✓ Todo el inventario está en orden</div>'
-          : `<table><thead><tr><th>PRODUCTO</th><th>STOCK</th><th>MÍNIMO</th></tr></thead><tbody>
-              ${data.productos.filter(p=>p.stock<=p.stock_minimo).map(p=>`<tr>
-                <td>${p.nombre}</td>
-                <td style="color:#dc2626;font-weight:900;">${p.stock}</td>
-                <td style="color:#888;">${p.stock_minimo}</td>
-              </tr>`).join("")}
-            </tbody></table>`
-        }
-      </div>
-    </div>
-
-    <div class="footer">
-      <span><strong>NexuStoreRD</strong> — Accesorios de PC | Santo Domingo, República Dominicana</span>
-      <span>Reporte generado automáticamente · Período ${ano}</span>
-    </div>
-    </body></html>`);
+    const css = "*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Share Tech Mono','Courier New',monospace;background:#000;color:#e0e0e0;padding:36px;font-size:13px;}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:18px;border-bottom:2px solid #00d4ff40;}.logo-name{font-size:26px;font-weight:900;color:#00d4ff;letter-spacing:4px;}.badge{background:#080808;border:1px solid #00d4ff30;border-radius:8px;padding:12px 20px;text-align:right;}.badge-label{font-size:10px;color:#444;letter-spacing:2px;text-transform:uppercase;}.badge-val{font-size:18px;font-weight:900;color:#00d4ff;margin-top:4px;}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:28px;}.info-box{background:#080808;border:1px solid #00d4ff15;border-radius:8px;padding:14px 18px;}.info-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #ffffff08;font-size:12px;}.info-row:last-child{border:none;}.section-title{font-size:10px;font-weight:700;color:#00d4ff;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #00d4ff20;}table{width:100%;border-collapse:collapse;margin-bottom:20px;}th{background:#080808;color:#00d4ff;padding:10px 14px;text-align:left;font-size:10px;letter-spacing:2px;border-bottom:1px solid #00d4ff30;}th:last-child,td:last-child{text-align:right;}td{padding:10px 14px;font-size:12px;border-bottom:1px solid #ffffff08;color:#ccc;}tr:nth-child(even) td{background:#050505;}.totals{margin-left:auto;width:320px;margin-top:8px;}.total-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #ffffff08;font-size:13px;color:#aaa;}.total-final{display:flex;justify-content:space-between;padding:14px 0 0;font-size:18px;font-weight:900;color:#00d4ff;border-top:2px solid #00d4ff40;margin-top:4px;}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;}.card{border-radius:6px;padding:14px;border-left:3px solid;background:#080808;}.card-val{font-size:16px;font-weight:900;margin-bottom:4px;}.card-lbl{font-size:9px;color:#444;letter-spacing:1.5px;text-transform:uppercase;}.st{font-size:10px;color:#00d4ff;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #00d4ff20;}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:20px;}.footer{margin-top:36px;padding-top:16px;border-top:1px solid #00d4ff15;display:flex;justify-content:space-between;font-size:10px;color:#333;}.btn-wrap{text-align:center;margin-bottom:24px;padding:16px;background:#050505;border-bottom:1px solid #00d4ff15;}.btn-print{background:#00d4ff;color:#000;border:none;padding:10px 28px;border-radius:4px;font-size:13px;cursor:pointer;font-weight:700;margin-right:10px;letter-spacing:1px;}.btn-close{background:#0a0a0a;color:#666;border:1px solid #333;padding:10px 20px;border-radius:4px;font-size:13px;cursor:pointer;}@media print{.no-print{display:none!important;}body{background:#000;}}";
+    w.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Reporte "+ano+" NexuStoreRD</title><style>"+css+".cw{display:flex;align-items:flex-end;gap:4px;height:"+(barH+20)+"px;background:#050505;border:1px solid #00d4ff15;border-radius:6px;padding:14px 10px 8px;margin-bottom:20px;}</style></head><body>");
+    w.document.write("<div class='no-print btn-wrap'><button class='btn-print' onclick='window.print()'>Imprimir / PDF</button><button class='btn-close' onclick='window.close()'>Cerrar</button></div>");
+    w.document.write("<div class='header'><div><div class='logo-name'>NEXU<span style='color:#ff6b35;'>STORE</span> <span style='color:#ff6b35;'>RD</span></div><div style='font-size:10px;color:#333;margin-top:4px;'>REPORTE FINANCIERO · ACCESORIOS DE PC</div><div style='font-size:10px;color:#333;margin-top:3px;'>"+new Date().toLocaleDateString("es-DO",{year:"numeric",month:"long",day:"numeric"})+"</div></div><div class='badge'><div class='badge-label'>Período</div><div class='badge-val'>"+ano+"</div></div></div>");
+    w.document.write("<div class='cards'>");
+    [{label:"Ingresos",val:fmt(totalVentas),color:"#00e676"},{label:"Gastos",val:fmt(totalCompras),color:"#ff6b35"},{label:"Ganancia",val:fmt(margen),color:margen>=0?"#00d4ff":"#ff3d57"},{label:"Rentabilidad",val:margenPct+"%",color:margenPct>0?"#00e676":"#ff3d57"}].forEach(s=>{
+      w.document.write("<div class='card' style='border-left-color:"+s.color+";'><div class='card-val' style='color:"+s.color+";'>"+s.val+"</div><div class='card-lbl'>"+s.label+"</div></div>");
+    });
+    w.document.write("</div>");
+    w.document.write("<div class='section-title'>📊 Ventas vs Gastos — "+ano+"</div><div style='display:flex;gap:14px;margin-bottom:8px;'><span style='display:flex;align-items:center;gap:5px;font-size:11px;color:#ccc;'><span style='width:10px;height:10px;background:#00d4ff;border-radius:2px;display:inline-block;'></span>Ventas</span><span style='display:flex;align-items:center;gap:5px;font-size:11px;color:#ccc;'><span style='width:10px;height:10px;background:#ff6b35;border-radius:2px;display:inline-block;'></span>Gastos</span></div>");
+    w.document.write("<div class='cw'>"+barsHTML+"</div>");
+    w.document.write("<div class='section-title' style='margin-bottom:12px;'>📦 Margen por producto — Top 8</div><table><thead><tr><th>#</th><th>PRODUCTO</th><th>CATEGORÍA</th><th>COSTO</th><th>P. VENTA</th><th>MARGEN %</th><th>GANANCIA/UND</th><th>STOCK</th></tr></thead><tbody>");
+    topProds.forEach((p,i)=>{
+      const mc = p.mp>=60?"#00e676":p.mp>=30?"#ffd600":"#ff3d57";
+      w.document.write("<tr><td style='color:#555;'>"+(i+1)+"</td><td style='color:#e0e0e0;font-weight:700;'>"+p.nombre+"</td><td style='color:#666;'>"+p.categoria+"</td><td style='color:#ff6b35;'>"+fmt(p.precio_compra)+"</td><td style='color:#00e676;'>"+fmt(p.precio_venta)+"</td><td style='font-weight:900;color:"+mc+";'>"+p.mp.toFixed(1)+"%</td><td style='color:#00e676;font-weight:700;'>"+fmt(p.precio_venta-p.precio_compra)+"</td><td style='color:"+(p.stock<=p.stock_minimo?"#ff3d57":"#ccc")+";'>"+p.stock+"</td></tr>");
+    });
+    w.document.write("</tbody></table>");
+    w.document.write("<div class='grid2'><div><div class='section-title'>Resumen</div>");
+    [{l:"Total ventas",v:data.ventas.length+" transacciones"},{l:"Total compras",v:data.compras.length+" órdenes"},{l:"Ventas pendientes",v:fmt(data.ventas.filter(v=>v.estado==="Pendiente").reduce((s,v)=>s+v.total,0))},{l:"Deudas por cobrar",v:fmt(totalDeudas)},{l:"Productos",v:data.productos.length+" items"},{l:"Clientes",v:data.clientes.length}].forEach(r=>{
+      w.document.write("<div class='info-row'><span style='color:#444;'>"+r.l+"</span><strong style='color:#ccc;'>"+r.v+"</strong></div>");
+    });
+    w.document.write("</div><div><div class='section-title'>Alertas de stock</div>");
+    const alertas = data.productos.filter(p=>p.stock<=p.stock_minimo);
+    if(alertas.length===0) w.document.write("<div style='color:#00e676;font-size:12px;padding:8px 0;'>✓ Todo en orden</div>");
+    alertas.forEach(p=>{ w.document.write("<div class='info-row'><span style='color:#ccc;'>"+p.nombre+"</span><strong style='color:#ff3d57;'>"+p.stock+" und</strong></div>"); });
+    w.document.write("</div></div>");
+    w.document.write("<div class='footer'><span><strong style='color:#00d4ff;'>NexuStoreRD</strong> — Accesorios de PC | Santo Domingo, Rep. Dominicana</span><span>Período "+ano+"</span></div>");
+    w.document.write("</body></html>");
     w.document.close();
   };
 
-  // ── Nav ────────────────────────────────────────────────────────────────────
+    // ── Nav ────────────────────────────────────────────────────────────────────
   const NAV = [
     { id:"dashboard",    icon:"◈",  label:"Dashboard" },
     { id:"inventario",   icon:"▦",  label:"Inventario" },
@@ -1006,7 +982,7 @@ export default function NexuStoreRD() {
             NEXU<span style={{ color:"#ff6b35" }}>STORE</span>
           </div>
           <div style={{ color:"#ff6b35", fontSize:11, letterSpacing:4, marginTop:4, fontWeight:700 }}>RD</div>
-          <div style={{ fontSize:10, color:"#333", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v6.8</div>
+          <div style={{ fontSize:10, color:"#333", marginTop:6, letterSpacing:1 }}>SISTEMA DE GESTIÓN v7.2</div>
         </div>
         <div style={{ padding:"0 12px", flex:1 }}>
           {NAV.map(item => (
@@ -1044,7 +1020,7 @@ export default function NexuStoreRD() {
             {view==="clientes"     && <Btn color="#00d4ff" onClick={()=>{setClientForm(emptyClient);setModal({type:"client"});}}>＋ CLIENTE</Btn>}
             {view==="ventas"       && <Btn color="#00e676" onClick={()=>{setVentaForm(emptyVenta);setVentaClientSearch("");setVentaProdSearch("");setModal({type:"venta"});}}>＋ VENTA</Btn>}
             {view==="compras"      && <Btn color="#ff6b35" onClick={()=>{setCompraForm(emptyCompra);setModal({type:"compra"});}}>＋ COMPRA</Btn>}
-            {view==="deudas"       && <Btn color="#ff3d57" onClick={()=>{setDeudaForm(emptyDeuda);setDeudaItem(emptyDeudaItem);setDeudaClientSearch("");setDeudaProdSearch("");setModal({type:"deuda"});}}>＋ DEUDA</Btn>}
+            {view==="deudas"       && <Btn color="#ff3d57" onClick={()=>{setDeudaForm(emptyDeuda);setDeudaItem(emptyDeudaItem);setDeudaClientSearch("");setDeudaProdSearch("");setDeudaTabProd("inventario");setDeudaItemExterno(emptyDeudaExterno);setModal({type:"deuda"});}}>＋ DEUDA</Btn>}
             {view==="cotizaciones" && <Btn color="#a78bfa" onClick={()=>{setCotForm(emptyCotizacion);setCotProdSearch("");setCotClientSearch("");setModal({type:"cotizacion"});}}>＋ COTIZACIÓN</Btn>}
           </div>
         </div>
@@ -2169,74 +2145,169 @@ export default function NexuStoreRD() {
           <Field label="DESCRIPCIÓN / NOTA">
             <Input value={deudaForm.descripcion} onChange={e=>setDeudaForm({...deudaForm,descripcion:e.target.value})} placeholder="Se llena automático al agregar productos..." />
           </Field>
-          {/* Selector de productos del inventario */}
+          {/* Tabs: Inventario vs Artículo externo */}
           <div style={{ background:"#0a0a0a", border:"1px solid #ff3d5720", borderRadius:6, padding:16 }}>
-            <div style={{ fontSize:11, color:"#ff3d57", letterSpacing:2, marginBottom:12, fontFamily:"Orbitron,monospace" }}>
-              PRODUCTOS DEL INVENTARIO
+            {/* Toggle tabs */}
+            <div style={{ display:"flex", gap:0, marginBottom:14, borderRadius:4, overflow:"hidden", border:"1px solid #1a1a1a", width:"fit-content" }}>
+              {[{id:"inventario",label:"📦 DEL INVENTARIO"},{id:"externo",label:"✦ ARTÍCULO EXTERNO"}].map(t=>(
+                <button key={t.id} onClick={()=>setDeudaTabProd(t.id)}
+                  style={{ padding:"8px 16px", cursor:"pointer", fontFamily:"inherit", fontSize:11, fontWeight:700, letterSpacing:1, border:"none",
+                    background:deudaTabProd===t.id?"#ff3d5730":"#0a0a0a", color:deudaTabProd===t.id?"#ff3d57":"#444", transition:"all .2s" }}>
+                  {t.label}
+                </button>
+              ))}
             </div>
-            <div style={{ display:"flex", gap:8, marginBottom:8 }}>
-              {/* Buscador de producto por nombre */}
-              <div style={{ flex:2, position:"relative" }}>
-                <input
-                  autoComplete="off"
-                  value={deudaProdSearch}
-                  onChange={e=>{ setDeudaProdSearch(e.target.value); setDeudaItem(f=>({...f,producto_id:""})); }}
-                  placeholder="Buscar producto por nombre..."
-                  style={{ width:"100%", padding:"10px 14px", border:`1px solid ${deudaItem.producto_id?"#ff3d5760":"#1a1a1a"}`, borderRadius:4, fontSize:12, background:"#0a0a0a", color:"#e0e0e0", outline:"none", fontFamily:"inherit" }}
-                />
-                {deudaProdSearch && !deudaItem.producto_id && (
-                  <div style={{ position:"absolute", top:"100%", left:0, right:0, background:"#0d0d0d", border:"1px solid #ff3d5740", borderTop:"none", borderRadius:"0 0 4px 4px", zIndex:50, maxHeight:180, overflowY:"auto" }}>
-                    {data.productos.filter(p=>p.stock>0&&p.nombre.toLowerCase().includes(deudaProdSearch.toLowerCase())).slice(0,6).map(p=>(
-                      <div key={p.id}
-                        onClick={()=>{ setDeudaItem(f=>({...f,producto_id:String(p.id)})); setDeudaProdSearch(p.nombre); }}
-                        style={{ padding:"9px 14px", cursor:"pointer", fontSize:12, borderBottom:"1px solid #ffffff06", display:"flex", justifyContent:"space-between" }}
-                        onMouseEnter={e=>e.currentTarget.style.background="#ff3d5715"}
-                        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                        <span style={{color:"#e0e0e0",fontWeight:600}}>{p.nombre}</span>
-                        <div style={{display:"flex",gap:10,fontSize:11}}>
-                          <span style={{color:"#00e676"}}>{fmt(p.precio_venta)}</span>
-                          <span style={{color:p.stock<=p.stock_minimo?"#ff3d57":"#444"}}>stock: {p.stock}</span>
-                        </div>
+
+            {/* TAB: Inventario existente */}
+            {deudaTabProd==="inventario" && (
+              <div>
+                <div style={{ fontSize:10, color:"#555", marginBottom:10, letterSpacing:1 }}>Busca un producto que ya tienes en inventario</div>
+                <div style={{ display:"flex", gap:8, marginBottom:8 }}>
+                  <div style={{ flex:2, position:"relative" }}>
+                    <input autoComplete="off" value={deudaProdSearch}
+                      onChange={e=>{ setDeudaProdSearch(e.target.value); setDeudaItem(f=>({...f,producto_id:""})); }}
+                      placeholder="Buscar producto por nombre..."
+                      style={{ width:"100%", padding:"10px 14px", border:`1px solid ${deudaItem.producto_id?"#ff3d5760":"#1a1a1a"}`, borderRadius:4, fontSize:12, background:"#0a0a0a", color:"#e0e0e0", outline:"none", fontFamily:"inherit" }}
+                    />
+                    {deudaProdSearch && !deudaItem.producto_id && (
+                      <div style={{ position:"absolute", top:"100%", left:0, right:0, background:"#0d0d0d", border:"1px solid #ff3d5740", borderTop:"none", borderRadius:"0 0 4px 4px", zIndex:50, maxHeight:180, overflowY:"auto" }}>
+                        {data.productos.filter(p=>p.stock>0&&p.nombre.toLowerCase().includes(deudaProdSearch.toLowerCase())).slice(0,6).map(p=>(
+                          <div key={p.id} onClick={()=>{ setDeudaItem(f=>({...f,producto_id:String(p.id)})); setDeudaProdSearch(p.nombre); }}
+                            style={{ padding:"9px 14px", cursor:"pointer", fontSize:12, borderBottom:"1px solid #ffffff06", display:"flex", justifyContent:"space-between" }}
+                            onMouseEnter={e=>e.currentTarget.style.background="#ff3d5715"}
+                            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                            <span style={{color:"#e0e0e0",fontWeight:600}}>{p.nombre}</span>
+                            <div style={{display:"flex",gap:10,fontSize:11}}>
+                              <span style={{color:"#00e676"}}>{fmt(p.precio_venta)}</span>
+                              <span style={{color:p.stock<=p.stock_minimo?"#ff3d57":"#444"}}>stock: {p.stock}</span>
+                            </div>
+                          </div>
+                        ))}
+                        {data.productos.filter(p=>p.stock>0&&p.nombre.toLowerCase().includes(deudaProdSearch.toLowerCase())).length===0 &&
+                          <div style={{padding:"10px 14px",fontSize:12,color:"#444"}}>Sin resultados en inventario</div>
+                        }
                       </div>
-                    ))}
-                    {data.productos.filter(p=>p.stock>0&&p.nombre.toLowerCase().includes(deudaProdSearch.toLowerCase())).length===0 &&
-                      <div style={{padding:"10px 14px",fontSize:12,color:"#444"}}>Sin resultados</div>
-                    }
+                    )}
+                  </div>
+                  <Input style={{width:80}} type="number" min={1} value={deudaItem.cantidad} onChange={e=>setDeudaItem({...deudaItem,cantidad:e.target.value})} placeholder="Cant" />
+                  <Btn color="#ff3d57" onClick={()=>{ addDeudaItem(); setDeudaProdSearch(""); }}>＋</Btn>
+                </div>
+                {deudaItem.producto_id && (() => {
+                  const p = data.productos.find(x=>x.id===+deudaItem.producto_id);
+                  return p ? (
+                    <div style={{ background:"#ff3d5710", border:"1px solid #ff3d5730", borderRadius:4, padding:"7px 12px", fontSize:11, color:"#ff3d57", marginBottom:8, display:"flex", justifyContent:"space-between" }}>
+                      <span>✓ <strong>{p.nombre}</strong> — {fmt(p.precio_venta)}</span>
+                      <span style={{color:p.stock<=p.stock_minimo?"#ff3d57":"#555"}}>stock: {p.stock}</span>
+                    </div>
+                  ) : null;
+                })()}
+              </div>
+            )}
+
+            {/* TAB: Artículo externo (no está en inventario) */}
+            {deudaTabProd==="externo" && (
+              <div>
+                <div style={{ background:"#ffd60015", border:"1px solid #ffd60030", borderRadius:4, padding:"8px 12px", fontSize:11, color:"#ffd600", marginBottom:12 }}>
+                  ✦ Este artículo no está en tu inventario. Al guardar se creará automáticamente con stock 0 ya que está en deuda.
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+                  <Field label="NOMBRE DEL ARTÍCULO *">
+                    <Input value={deudaItemExterno.nombre} onChange={e=>setDeudaItemExterno({...deudaItemExterno,nombre:e.target.value})} placeholder="Ej: Mouse Gamer Pro" />
+                  </Field>
+                  <Field label="CATEGORÍA">
+                    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                      <select value={deudaItemExterno.categoria} onChange={e=>setDeudaItemExterno({...deudaItemExterno,categoria:e.target.value})}
+                        style={{width:"100%",padding:"10px 14px",border:"1px solid #1a1a1a",borderRadius:4,fontSize:12,background:"#0a0a0a",color:"#e0e0e0",outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
+                        {(data.categorias||[]).map(c=><option key={c}>{c}</option>)}
+                      </select>
+                      {/* Nueva categoría inline */}
+                      <div style={{display:"flex",gap:6}}>
+                        <input value={nuevaCatDeuda} onChange={e=>setNuevaCatDeuda(e.target.value)}
+                          onKeyDown={e=>{
+                            if(e.key==="Enter"){
+                              const cat=nuevaCatDeuda.trim();
+                              if(!cat) return;
+                              if((data.categorias||[]).map(c=>c.toLowerCase()).includes(cat.toLowerCase())){showNotify("⚠ Categoría ya existe","error");return;}
+                              const categorias=[...(data.categorias||[]),cat];
+                              save({...data,categorias});
+                              setDeudaItemExterno(f=>({...f,categoria:cat}));
+                              setNuevaCatDeuda("");
+                              showNotify(`✓ Categoría "${cat}" agregada`);
+                            }
+                          }}
+                          placeholder="Nueva categoría..." maxLength={30}
+                          style={{flex:1,padding:"7px 12px",border:"1px solid #1a1a1a",borderRadius:4,fontSize:11,background:"#0a0a0a",color:"#e0e0e0",outline:"none",fontFamily:"inherit"}} />
+                        <button onClick={()=>{
+                          const cat=nuevaCatDeuda.trim();
+                          if(!cat){showNotify("⚠ Escribe el nombre","error");return;}
+                          if((data.categorias||[]).map(c=>c.toLowerCase()).includes(cat.toLowerCase())){showNotify("⚠ Ya existe","error");return;}
+                          const categorias=[...(data.categorias||[]),cat];
+                          save({...data,categorias});
+                          setDeudaItemExterno(f=>({...f,categoria:cat}));
+                          setNuevaCatDeuda("");
+                          showNotify(`✓ Categoría "${cat}" agregada`);
+                        }} className="btn-glow"
+                          style={{background:"#ff3d5715",color:"#ff3d57",border:"1px solid #ff3d5740",borderRadius:4,cursor:"pointer",fontSize:11,padding:"7px 12px",fontFamily:"inherit",fontWeight:700,whiteSpace:"nowrap"}}>
+                          ＋
+                        </button>
+                      </div>
+                    </div>
+                  </Field>
+                  <Field label="PRECIO DE VENTA (DOP) *">
+                    <Input type="number" value={deudaItemExterno.precio} onChange={e=>setDeudaItemExterno({...deudaItemExterno,precio:e.target.value})} placeholder="Precio acordado" />
+                  </Field>
+                  <Field label="CANTIDAD *">
+                    <Input type="number" min={1} value={deudaItemExterno.cantidad} onChange={e=>setDeudaItemExterno({...deudaItemExterno,cantidad:e.target.value})} placeholder="Unidades" />
+                  </Field>
+                </div>
+                {deudaItemExterno.precio && deudaItemExterno.cantidad && (
+                  <div style={{ background:"#ff3d5710", border:"1px solid #ff3d5730", borderRadius:4, padding:"8px 12px", fontSize:11, color:"#ff3d57", marginBottom:10 }}>
+                    Subtotal: <strong>{fmt(+deudaItemExterno.precio * +deudaItemExterno.cantidad)}</strong>
                   </div>
                 )}
+                <Btn color="#ff3d57" onClick={addDeudaItemExterno} style={{width:"100%"}}>＋ AGREGAR ARTÍCULO EXTERNO</Btn>
               </div>
-              <Input style={{width:80}} type="number" min={1} value={deudaItem.cantidad} onChange={e=>setDeudaItem({...deudaItem,cantidad:e.target.value})} placeholder="Cant" />
-              <Btn color="#ff3d57" onClick={()=>{ addDeudaItem(); setDeudaProdSearch(""); }}>＋</Btn>
-            </div>
-            {/* Confirmación producto seleccionado */}
-            {deudaItem.producto_id && (() => {
-              const p = data.productos.find(x=>x.id===+deudaItem.producto_id);
-              return p ? (
-                <div style={{ background:"#ff3d5710", border:"1px solid #ff3d5730", borderRadius:4, padding:"7px 12px", fontSize:11, color:"#ff3d57", marginBottom:10, display:"flex", justifyContent:"space-between" }}>
-                  <span>✓ <strong>{p.nombre}</strong> — {fmt(p.precio_venta)}</span>
-                  <span style={{color:p.stock<=p.stock_minimo?"#ff3d57":"#555"}}>stock: {p.stock}</span>
-                </div>
-              ) : null;
-            })()}
-            {deudaForm.items.map((item,i) => (
-              <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderBottom:"1px solid #ffffff08", fontSize:12 }}>
-                <span style={{color:"#aaa"}}>{item.nombre} × {item.cantidad}</span>
-                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                  <span style={{color:"#ff3d57",fontWeight:900}}>{fmt(item.cantidad*item.precio)}</span>
-                  <button onClick={()=>removeDeudaItem(i)} style={{ background:"#ff3d5715", color:"#ff3d57", border:"1px solid #ff3d5740", borderRadius:3, cursor:"pointer", fontSize:10, padding:"2px 7px" }}>✕</button>
-                </div>
-              </div>
-            ))}
+            )}
+
+            {/* Lista de todos los items agregados */}
             {deudaForm.items.length > 0 && (
-              <div style={{ display:"flex", justifyContent:"space-between", padding:"12px 0 0", fontFamily:"Orbitron,monospace", fontSize:15 }}>
-                <span style={{color:"#444"}}>TOTAL DEUDA</span>
-                <span style={{color:"#ff3d57",fontWeight:900}}>{fmt(deudaForm.items.reduce((s,i)=>s+i.cantidad*i.precio,0))}</span>
+              <div style={{ marginTop:14, borderTop:"1px solid #ffffff08", paddingTop:12 }}>
+                <div style={{ fontSize:10, color:"#555", letterSpacing:1, marginBottom:8 }}>ARTÍCULOS EN ESTA DEUDA</div>
+                {deudaForm.items.map((item,i) => (
+                  <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderBottom:"1px solid #ffffff06", fontSize:12 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                      {item.externo && <span style={{ background:"#ffd60020", color:"#ffd600", border:"1px solid #ffd60040", borderRadius:3, fontSize:9, padding:"1px 5px", fontWeight:700 }}>EXTERNO</span>}
+                      <span style={{color:"#aaa"}}>{item.nombre} × {item.cantidad}</span>
+                    </div>
+                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                      <span style={{color:"#ff3d57",fontWeight:900}}>{fmt(item.cantidad*item.precio)}</span>
+                      <button onClick={()=>removeDeudaItem(i)} style={{ background:"#ff3d5715", color:"#ff3d57", border:"1px solid #ff3d5740", borderRadius:3, cursor:"pointer", fontSize:10, padding:"2px 7px" }}>✕</button>
+                    </div>
+                  </div>
+                ))}
+                <div style={{ display:"flex", justifyContent:"space-between", padding:"12px 0 0", fontFamily:"Orbitron,monospace", fontSize:15 }}>
+                  <span style={{color:"#444"}}>TOTAL DEUDA</span>
+                  <span style={{color:"#ff3d57",fontWeight:900}}>{fmt(deudaForm.items.reduce((s,i)=>s+i.cantidad*i.precio,0))}</span>
+                </div>
               </div>
             )}
           </div>
+
+          {/* Abono inicial */}
+          {deudaForm.items.length > 0 && (
+            <Field label="ABONO INICIAL (DOP) — opcional">
+              <Input type="number" value={deudaForm.abonoInicial||"0"} onChange={e=>setDeudaForm({...deudaForm,abonoInicial:e.target.value})} placeholder="0 si no ha abonado nada" />
+              {(+deudaForm.abonoInicial||0) > 0 && (
+                <div style={{ background:"#00e67610", border:"1px solid #00e67630", borderRadius:4, padding:"7px 12px", fontSize:11, color:"#00e676", marginTop:6 }}>
+                  Pendiente quedará: <strong>{fmt(Math.max(0, deudaForm.items.reduce((s,i)=>s+i.cantidad*i.precio,0) - (+deudaForm.abonoInicial||0)))}</strong>
+                </div>
+              )}
+            </Field>
+          )}
+
           {deudaForm.items.length > 0 && (
             <div style={{ background:"#ff3d5710", border:"1px solid #ff3d5730", borderRadius:4, padding:"10px 16px", fontSize:12, color:"#ff3d57" }}>
-              ⚠ Al guardar, el stock de los productos seleccionados se descontará automáticamente del inventario.
+              ⚠ Al guardar, el stock se actualizará en inventario. Los artículos externos se crearán nuevos.
             </div>
           )}
         </Modal>
@@ -2605,37 +2676,37 @@ function ReporteModal({ data, fmt, MESES, rango, setRango, onClose }) {
       const hV=Math.round((m.v/maxBar)*barH);
       const hC=Math.round((m.c/maxBar)*barH);
       const gan=m.v-m.c;
-      return "<div style='flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;'><div style='width:100%;display:flex;gap:2px;align-items:flex-end;height:"+barH+"px;'><div style='flex:1;height:"+(hV||1)+"px;background:"+(m.v>0?"#2563eb":"#e5e7eb")+";border-radius:2px 2px 0 0;min-height:"+(m.v>0?2:0)+"px;'></div><div style='flex:1;height:"+(hC||1)+"px;background:"+(m.c>0?"#ea580c":"#e5e7eb")+";border-radius:2px 2px 0 0;min-height:"+(m.c>0?2:0)+"px;'></div></div><div style='font-size:8px;color:#888;margin-top:2px;'>"+m.mes+"</div>"+(m.v>0||m.c>0?"<div style='font-size:7px;color:"+(gan>=0?"#16a34a":"#dc2626")+";font-weight:700;'>"+(gan>=0?"+":"")+Math.round(gan/1000)+"K</div>":"")+"</div>";
+      return "<div style='flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;'><div style='width:100%;display:flex;gap:2px;align-items:flex-end;height:"+barH+"px;'><div style='flex:1;height:"+(hV||1)+"px;background:"+(m.v>0?"#2563eb":"#e5e7eb")+";border-radius:2px 2px 0 0;min-height:"+(m.v>0?2:0)+"px;'></div><div style='flex:1;height:"+(hC||1)+"px;background:"+(m.c>0?"#ea580c":"#e5e7eb")+";border-radius:2px 2px 0 0;min-height:"+(m.c>0?2:0)+"px;'></div></div><div style='font-size:8px;color:#444;margin-top:2px;'>"+m.mes+"</div>"+(m.v>0||m.c>0?"<div style='font-size:7px;color:"+(gan>=0?"#16a34a":"#dc2626")+";font-weight:700;'>"+(gan>=0?"+":"")+Math.round(gan/1000)+"K</div>":"")+"</div>";
     }).join("");
 
     const w = window.open("", "_blank");
-    w.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Reporte NexuStoreRD</title><style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#222;padding:40px;font-size:13px;}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:18px;border-bottom:3px solid #2563eb;}.logo{font-size:26px;font-weight:900;color:#2563eb;letter-spacing:2px;}.badge{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 20px;text-align:right;}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:28px;}.card{border-radius:8px;padding:16px;border-left:4px solid;}.card-val{font-size:18px;font-weight:900;margin-bottom:4px;}.card-lbl{font-size:10px;color:#888;letter-spacing:1px;text-transform:uppercase;}.st{font-size:11px;font-weight:700;color:#888;letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid #f0f0f0;}.cw{display:flex;align-items:flex-end;gap:4px;height:"+(barH+20)+"px;background:#f8fafc;border-radius:8px;padding:14px 10px 8px;margin-bottom:24px;}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px;}table{width:100%;border-collapse:collapse;margin-bottom:20px;}th{background:#2563eb;color:#fff;padding:9px 12px;text-align:left;font-size:11px;letter-spacing:1px;}th:last-child,td:last-child{text-align:right;}td{padding:9px 12px;font-size:12px;border-bottom:1px solid #f0f0f0;}tr:nth-child(even) td{background:#f9f7ff;}.footer{margin-top:36px;padding-top:16px;border-top:1px solid #eee;display:flex;justify-content:space-between;font-size:11px;color:#aaa;}@media print{.np{display:none!important;}}</style></head><body>");
+    w.document.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Reporte NexuStoreRD</title><style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#222;padding:40px;font-size:13px;}*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Share Tech Mono','Courier New',monospace;background:#000;color:#e0e0e0;padding:36px;font-size:13px;}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:18px;border-bottom:2px solid #00d4ff40;}.logo-name{font-size:26px;font-weight:900;color:#00d4ff;letter-spacing:4px;}.badge{background:#080808;border:1px solid #00d4ff30;border-radius:8px;padding:12px 20px;text-align:right;}.badge-label{font-size:10px;color:#444;letter-spacing:2px;text-transform:uppercase;}.badge-val{font-size:15px;font-weight:900;color:#00d4ff;margin-top:4px;}.st{font-size:10px;color:#00d4ff;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #00d4ff20;}table{width:100%;border-collapse:collapse;margin-bottom:20px;}th{background:#080808;color:#00d4ff;padding:9px 12px;text-align:left;font-size:10px;letter-spacing:2px;border-bottom:1px solid #00d4ff30;}th:last-child,td:last-child{text-align:right;}td{padding:9px 12px;font-size:12px;border-bottom:1px solid #ffffff08;color:#ccc;}tr:nth-child(even) td{background:#050505;}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;}.card{border-radius:6px;padding:14px;border-left:3px solid;background:#080808;}.card-val{font-size:16px;font-weight:900;margin-bottom:4px;}.card-lbl{font-size:9px;color:#444;letter-spacing:1.5px;text-transform:uppercase;}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:20px;}.footer{margin-top:36px;padding-top:16px;border-top:1px solid #00d4ff15;display:flex;justify-content:space-between;font-size:10px;color:#333;}.btn-wrap{text-align:center;margin-bottom:24px;padding:16px;background:#050505;border-bottom:1px solid #00d4ff15;}.btn-print{background:#00d4ff;color:#000;border:none;padding:10px 28px;border-radius:4px;font-size:13px;cursor:pointer;font-weight:700;margin-right:10px;letter-spacing:1px;}.btn-close{background:#0a0a0a;color:#666;border:1px solid #333;padding:10px 20px;border-radius:4px;font-size:13px;cursor:pointer;}.cw{display:flex;align-items:flex-end;gap:4px;background:#050505;border:1px solid #00d4ff15;border-radius:6px;padding:12px 8px 6px;margin-bottom:20px;}@media print{.no-print{display:none!important;}body{background:#000;}}</style></head><body>");
     w.document.write("<div class='np' style='text-align:center;margin-bottom:22px;'>");
     if (!soloVista) {
-      w.document.write("<button onclick='window.print()' style='background:#2563eb;color:#fff;border:none;padding:10px 28px;border-radius:6px;font-size:14px;cursor:pointer;font-weight:700;margin-right:10px;'>Imprimir / Guardar PDF</button>");
+      w.document.write("<button onclick='window.print()' style='background:#00d4ff;color:#fff;border:none;padding:10px 28px;border-radius:6px;font-size:14px;cursor:pointer;font-weight:700;margin-right:10px;'>Imprimir / Guardar PDF</button>");
     }
     w.document.write("<button onclick='window.close()' style='background:#f3f4f6;color:#555;border:1px solid #ddd;padding:10px 18px;border-radius:6px;font-size:14px;cursor:pointer;'>Cerrar</button></div>");
-    w.document.write("<div class='header'><div><div class='logo'>NEXU<span style='color:#f97316;'>STORE</span> <span style='color:#f97316;'>RD</span></div><div style='font-size:11px;color:#888;margin-top:5px;'>REPORTE FINANCIERO — PERÍODO: "+rango.desde+" AL "+rango.hasta+"</div><div style='font-size:11px;color:#aaa;margin-top:3px;'>Generado el "+new Date().toLocaleDateString("es-DO",{year:"numeric",month:"long",day:"numeric"})+"</div></div><div class='badge'><div style='font-size:10px;color:#888;'>PERÍODO</div><div style='font-size:14px;font-weight:900;color:#2563eb;margin-top:3px;'>"+rango.desde+"</div><div style='font-size:11px;color:#888;margin-top:2px;'>al "+rango.hasta+"</div></div></div>");
+    w.document.write("<div class='header'><div><div class='logo'>NEXU<span style='color:#f97316;'>STORE</span> <span style='color:#f97316;'>RD</span></div><div style='font-size:11px;color:#444;margin-top:5px;'>REPORTE FINANCIERO — PERÍODO: "+rango.desde+" AL "+rango.hasta+"</div><div style='font-size:11px;color:#aaa;margin-top:3px;'>Generado el "+new Date().toLocaleDateString("es-DO",{year:"numeric",month:"long",day:"numeric"})+"</div></div><div class='badge'><div style='font-size:10px;color:#444;'>PERÍODO</div><div style='font-size:14px;font-weight:900;color:#00d4ff;margin-top:3px;'>"+rango.desde+"</div><div style='font-size:11px;color:#444;margin-top:2px;'>al "+rango.hasta+"</div></div></div>");
     w.document.write("<div class='cards'>");
     [{l:"Ingresos",v:fmt(totalV),c:"#16a34a",bg:"#f0fdf4"},{l:"Gastos",v:fmt(totalC),c:"#ea580c",bg:"#fff7ed"},{l:"Ganancia",v:fmt(ganancia),c:ganancia>=0?"#2563eb":"#dc2626",bg:"#eff6ff"},{l:"Rentabilidad",v:rentab+"%",c:rentab>0?"#16a34a":"#dc2626",bg:"#f0fdf4"}].forEach(s=>{
       w.document.write("<div class='card' style='border-left-color:"+s.c+";background:"+s.bg+";'><div class='card-val' style='color:"+s.c+";'>"+s.v+"</div><div class='card-lbl'>"+s.l+"</div></div>");
     });
     w.document.write("</div>");
-    w.document.write("<div class='st'>Ventas vs Gastos por mes</div><div style='display:flex;gap:12px;margin-bottom:8px;'><span style='display:flex;align-items:center;gap:4px;font-size:11px;color:#555;'><span style='width:10px;height:10px;background:#2563eb;border-radius:2px;display:inline-block;'></span>Ventas</span><span style='display:flex;align-items:center;gap:4px;font-size:11px;color:#555;'><span style='width:10px;height:10px;background:#ea580c;border-radius:2px;display:inline-block;'></span>Gastos</span></div>");
+    w.document.write("<div class='st'>Ventas vs Gastos por mes</div><div style='display:flex;gap:12px;margin-bottom:8px;'><span style='display:flex;align-items:center;gap:4px;font-size:11px;color:#555;'><span style='width:10px;height:10px;background:#00d4ff;border-radius:2px;display:inline-block;'></span>Ventas</span><span style='display:flex;align-items:center;gap:4px;font-size:11px;color:#555;'><span style='width:10px;height:10px;background:#ea580c;border-radius:2px;display:inline-block;'></span>Gastos</span></div>");
     w.document.write("<div class='cw'>"+barsHTML+"</div>");
     w.document.write("<div class='grid2'><div><div class='st'>Ventas del período ("+ventas.length+")</div><table><thead><tr><th>CÓDIGO</th><th>CLIENTE</th><th>FECHA</th><th>TOTAL</th><th>ESTADO</th></tr></thead><tbody>");
-    ventas.forEach(v=>{ w.document.write("<tr><td>"+v.codigo+"</td><td>"+v.cliente_nombre+"</td><td>"+v.fecha+"</td><td style='color:#16a34a;font-weight:700;'>"+fmt(v.total)+"</td><td style='color:"+(v.estado==="Pagado"?"#16a34a":"#dc2626")+";font-weight:700;'>"+v.estado+"</td></tr>"); });
+    ventas.forEach(v=>{ w.document.write("<tr><td>"+v.codigo+"</td><td>"+v.cliente_nombre+"</td><td>"+v.fecha+"</td><td style='color:#00e676;font-weight:700;'>"+fmt(v.total)+"</td><td style='color:"+(v.estado==="Pagado"?"#16a34a":"#dc2626")+";font-weight:700;'>"+v.estado+"</td></tr>"); });
     if(ventas.length===0) w.document.write("<tr><td colspan='5' style='color:#aaa;text-align:center;padding:16px;'>Sin ventas en este período</td></tr>");
     w.document.write("</tbody></table></div><div><div class='st'>Compras del período ("+compras.length+")</div><table><thead><tr><th>CÓDIGO</th><th>PROVEEDOR</th><th>FECHA</th><th>TOTAL</th></tr></thead><tbody>");
-    compras.forEach(c=>{ w.document.write("<tr><td>"+c.codigo+"</td><td>"+c.proveedor+"</td><td>"+c.fecha+"</td><td style='color:#ea580c;font-weight:700;'>"+fmt(c.total)+"</td></tr>"); });
+    compras.forEach(c=>{ w.document.write("<tr><td>"+c.codigo+"</td><td>"+c.proveedor+"</td><td>"+c.fecha+"</td><td style='color:#ff6b35;font-weight:700;'>"+fmt(c.total)+"</td></tr>"); });
     if(compras.length===0) w.document.write("<tr><td colspan='4' style='color:#aaa;text-align:center;padding:16px;'>Sin compras en este período</td></tr>");
     w.document.write("</tbody></table></div></div>");
     w.document.write("<div class='st'>Margen por producto — Top 8</div><table><thead><tr><th>#</th><th>PRODUCTO</th><th>CATEGORÍA</th><th>COSTO</th><th>P. VENTA</th><th>GANANCIA/UND</th><th>MARGEN %</th><th>STOCK</th></tr></thead><tbody>");
-    topProds.forEach((p,i)=>{ w.document.write("<tr><td>"+(i+1)+"</td><td><strong>"+p.nombre+"</strong></td><td>"+p.categoria+"</td><td>"+fmt(p.precio_compra)+"</td><td>"+fmt(p.precio_venta)+"</td><td style='color:#16a34a;font-weight:700;'>"+fmt(p.precio_venta-p.precio_compra)+"</td><td style='font-weight:900;color:"+(p.mp>=60?"#16a34a":p.mp>=30?"#d97706":"#dc2626")+"'>"+p.mp.toFixed(1)+"%</td><td style='color:"+(p.stock<=p.stock_minimo?"#dc2626":"#222")+"'>"+p.stock+"</td></tr>"); });
+    topProds.forEach((p,i)=>{ w.document.write("<tr><td>"+(i+1)+"</td><td><strong>"+p.nombre+"</strong></td><td>"+p.categoria+"</td><td>"+fmt(p.precio_compra)+"</td><td>"+fmt(p.precio_venta)+"</td><td style='color:#00e676;font-weight:700;'>"+fmt(p.precio_venta-p.precio_compra)+"</td><td style='font-weight:900;color:"+(p.mp>=60?"#16a34a":p.mp>=30?"#d97706":"#dc2626")+"'>"+p.mp.toFixed(1)+"%</td><td style='color:"+(p.stock<=p.stock_minimo?"#dc2626":"#222")+"'>"+p.stock+"</td></tr>"); });
     w.document.write("</tbody></table>");
     if(deudas.length>0){
       w.document.write("<div class='st'>Deudas pendientes ("+deudas.length+") — "+fmt(totalD)+"</div><table><thead><tr><th>CLIENTE</th><th>DESCRIPCIÓN</th><th>MONTO</th><th>PAGADO</th><th>PENDIENTE</th></tr></thead><tbody>");
-      deudas.forEach(d=>{ w.document.write("<tr><td>"+d.cliente_nombre+"</td><td>"+d.descripcion+"</td><td>"+fmt(d.monto)+"</td><td style='color:#16a34a;'>"+fmt(d.monto_pagado)+"</td><td style='color:#dc2626;font-weight:700;'>"+fmt(d.monto-d.monto_pagado)+"</td></tr>"); });
+      deudas.forEach(d=>{ w.document.write("<tr><td>"+d.cliente_nombre+"</td><td>"+d.descripcion+"</td><td>"+fmt(d.monto)+"</td><td style='color:#00e676;'>"+fmt(d.monto_pagado)+"</td><td style='color:#ff3d57;font-weight:700;'>"+fmt(d.monto-d.monto_pagado)+"</td></tr>"); });
       w.document.write("</tbody></table>");
     }
     w.document.write("<div class='footer'><span><strong>NexuStoreRD</strong> — Accesorios de PC | Santo Domingo, Rep. Dominicana</span><span>Período: "+rango.desde+" al "+rango.hasta+"</span></div></body></html>");
